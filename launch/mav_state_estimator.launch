@@ -8,7 +8,7 @@
   <group ns="$(arg mav_name)" >
     <!-- Start rosbag  -->
     <node pkg="rosbag" type="play" name="rosbag_play" output="screen"
-      args="-r 1 --clock $(arg bag_base).bag" required="true" />
+      args="-q -r 1 --clock $(arg bag_base).bag" required="true" />
 
     <!-- Estimator -->
     <node name="mav_state_estimator" pkg="mav_state_estimation" type="mav_state_estimator" clear_params="true" output="screen">

@@ -9,10 +9,10 @@ MavStateEstimator::MavStateEstimator()
 
   // Subscribe to topics.
   const uint32_t kQueueSize = 1000;
-  imu_sub_ = nh_private_.subscribe("imu", kQueueSize,
-                                   &MavStateEstimator::imuCallback, this);
-  pos_0_sub_ = nh_private_.subscribe("pos0", kQueueSize,
-                                     &MavStateEstimator::posCallback, this);
+  imu_sub_ =
+      nh_.subscribe("imu", kQueueSize, &MavStateEstimator::imuCallback, this);
+  pos_0_sub_ =
+      nh_.subscribe("pos0", kQueueSize, &MavStateEstimator::posCallback, this);
 }
 
 void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr &imu_msg) {

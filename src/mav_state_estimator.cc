@@ -70,8 +70,9 @@ void MavStateEstimator::baselineCallback(
     // TRIAD method. Correspondences:
     // 1. Gravitation in NED frame R1, and IMU frame r1
     // 2. Moving baseline heading in NED frame R2, and IMU frame r2
+    Eigen::Quaterniond q_IB;
     calculateTriadOrientation(Eigen::Vector3d(0, 0, 1), *init_g_imu_, R2, r2,
-                              NULL);
+                              &q_IB);
     heading_init_ = std::make_optional<Eigen::Vector3d>();
   }
 }
@@ -98,8 +99,9 @@ void MavStateEstimator::calculateTriadOrientation(const Eigen::Vector3d &R1,
   ROS_INFO_STREAM("\n" << b);
 
   Eigen::Matrix3d A = b * a.transpose();
-
-  ROS_INFO_STREAM("\n" << A);
+  *q = Eigen::Quaterniond(A);
+  ROS_INFO("Computed inital orienation q_IB: [%.2f, %.2f, %.2f, %.2f]", q->x(),
+           q->y(), q->z(), q->w());
 }
 
 } // namespace mav_state_estimation

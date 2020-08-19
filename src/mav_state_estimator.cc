@@ -100,8 +100,9 @@ void MavStateEstimator::calculateTriadOrientation(const Eigen::Vector3d &R1,
 
   Eigen::Matrix3d A = b * a.transpose();
   *q = Eigen::Quaterniond(A);
-  ROS_INFO("Computed inital orienation q_IB: [%.2f, %.2f, %.2f, %.2f]", q->x(),
-           q->y(), q->z(), q->w());
+  ROS_INFO("Computed initial orientation q_IB [x, y, z, w]: [%.2f, %.2f, %.2f, "
+           "%.2f]",
+           q->x(), q->y(), q->z(), q->w());
 }
 
 } // namespace mav_state_estimation

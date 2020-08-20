@@ -72,6 +72,7 @@ void MavStateEstimator::baselineCallback(
         baseline_msg) {
   ROS_INFO_ONCE("Received first BASELINE message.");
   if (!init_.isInitialized()) {
+    // TODO(rikba): Use ECEF frame by default.
     // Moving baseline heading in inertial frame (ENU).
     Eigen::Vector3d I_h_NED;
     tf::pointMsgToEigen(baseline_msg->position.position, I_h_NED);

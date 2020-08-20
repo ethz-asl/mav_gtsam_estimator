@@ -15,6 +15,7 @@ find_package(Eigen3 REQUIRED)
 #############
 cs_add_library(${PROJECT_NAME}
   src/mav_state_estimator.cc
+  src/initialization.cc
 )
 target_link_libraries(${PROJECT_NAME} gtsam)
 

@@ -1,29 +1,46 @@
 #ifndef MAV_STATE_ESTIMATION_INITIALIZATION_H_
 #define MAV_STATE_ESTIMATION_INITIALIZATION_H_
 
+#include <geometry_msgs/TransformStamped.h>
 #include <Eigen/Dense>
 #include <optional>
-#include <tf2_ros/transform_broadcaster.h>
 
 namespace mav_state_estimation {
 
 // Orientation (and position) initialization using the TRIAD method.
 class Initialization {
-public:
-  void addOrientationConstraint(const Eigen::Vector3d r_B,
-                                const Eigen::Vector3d r_I);
-  void addPositionConstraint(const Eigen::Vector3d r_I,
-                             const Eigen::Vector3d B_t_P);
+ public:
+  // Add a vector measurement both in inertial and base frame.
+  void addOrientationConstraint1(const Eigen::Vector3d& r_I,
+                                 const Eigen::Vector3d& r_B,
+                                 const ros::Time& t);
+  // Add a second vector measurement both in inertial and base frame.
+  void addOrientationConstraint2(const Eigen::Vector3d& r_I,
+                                 const Eigen::Vector3d& r_B,
+                                 const ros::Time& t);
+  // Add a position constraint and its corresponding transformation from base
+  // frame to position sensor.
+  void addPositionConstraint(const Eigen::Vector3d& I_r_P,
+                             const Eigen::Vector3d& B_t_P, const ros::Time& t);
 
-private:
+  bool getInitialPose(geometry_msgs::TransformStamped* T_IB) const;
+
+ private:
   void computeInitialState();
 
-  std::optional<std::pair<Eigen::Vector3d, Eigen::Vector3d>> r_1;
-  std::optional<std::pair<Eigen::Vector3d, Eigen::Vector3d>> r_2;
-  std::optional<std::pair<Eigen::Vector3d, Eigen::Vector3d>> p;
+  void calculateTriadOrientation(const Eigen::Vector3d& R1,
+                                 const Eigen::Vector3d& r1,
+                                 const Eigen::Vector3d& R2,
+                                 const Eigen::Vector3d& r2,
+                                 Eigen::Matrix3d* R_IB) const;
 
-  tf2_ros::TransformBroadcaster br_;
+  typedef std::pair<Eigen::Vector3d, Eigen::Vector3d> VectorPair;
+  std::optional<VectorPair> r_1;
+  std::optional<VectorPair> r_2;
+  std::optional<VectorPair> p;
+  ros::Time stamp_;
+  std::optional<geometry_msgs::TransformStamped> T_IB_;
 };
 
-}
-#endif // MAV_STATE_ESTIMATION_INITIALIZATION_H_
+}  // namespace mav_state_estimation
+#endif  // MAV_STATE_ESTIMATION_INITIALIZATION_H_

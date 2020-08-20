@@ -15,7 +15,6 @@ MavStateEstimator::MavStateEstimator()
   B_t_A_ = getVectorFromParams("attitude_receiver/B_t");
   ROS_INFO_STREAM("Initial guess B_t_A: " << B_t_A_.transpose());
 
-  // Prior noise.
   Eigen::Vector3d prior_noise_rot_IB, prior_noise_I_t_B;
   prior_noise_rot_IB = getVectorFromParams("prior_noise_rot_IB");
   prior_noise_I_t_B = getVectorFromParams("prior_noise_I_t_B");
@@ -36,6 +35,13 @@ MavStateEstimator::MavStateEstimator()
       (gtsam::Vector(6) << prior_noise_acc_bias, prior_noise_gyro_bias)
           .finished());
   prior_noise_model_imu_bias_->print("prior_noise_model_imu_bias: ");
+
+  Eigen::Vector3d prior_acc_bias, prior_gyro_bias;
+  prior_acc_bias = getVectorFromParams("prior_acc_bias");
+  prior_gyro_bias = getVectorFromParams("prior_gyro_bias");
+  prior_imu_bias_ =
+      gtsam::imuBias::ConstantBias(prior_acc_bias, prior_gyro_bias);
+  prior_imu_bias_.print("prior_imu_bias: ");
 
   // Subscribe to topics.
   const uint32_t kQueueSize = 1000;

@@ -48,6 +48,7 @@ class MavStateEstimator {
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_T_I_B_;
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_I_v_B_;
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_imu_bias_;
+  gtsam::NavState nav_state_;
 };
 
 }  // namespace mav_state_estimation

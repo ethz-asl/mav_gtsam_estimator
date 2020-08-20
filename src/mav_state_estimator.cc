@@ -67,6 +67,14 @@ Eigen::Vector3d MavStateEstimator::getVectorFromParams(
 void MavStateEstimator::initializeGraph() {
   geometry_msgs::TransformStamped T_IB_0;
   if (init_.getInitialPose(&T_IB_0)) {
+    Eigen::Vector3d I_t_B;
+    Eigen::Quaterniond q_IB;
+    tf::vectorMsgToEigen(T_IB_0.transform.translation, I_t_B);
+    tf::quaternionMsgToEigen(T_IB_0.transform.rotation, q_IB);
+
+    Eigen::Vector3d I_v_B = Eigen::Vector3d::Zero();
+    nav_state_ = gtsam::NavState(gtsam::Rot3(q_IB), I_t_B, I_v_B);
+    nav_state_.print("Initial state: ");
   }
 }
 

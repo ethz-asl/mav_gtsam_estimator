@@ -59,15 +59,6 @@ void Initialization::computeInitialState() {
     tf::vectorEigenToMsg(I_t_B, T_IB_->transform.translation);
     tf::quaternionEigenToMsg(Eigen::Quaterniond(R_IB),
                              T_IB_->transform.rotation);
-    ROS_INFO(
-        "Computed initial pose. Inertial frame: %s, base frame: %s q_IB [x, y, "
-        "z, w]: [%.2f, %.2f, %.2f, %.2f], "
-        "I_t_B [x, y, z]: [%.2f, %.2f, %.2f]",
-        T_IB_->header.frame_id.c_str(), T_IB_->child_frame_id.c_str(),
-        T_IB_->transform.rotation.x, T_IB_->transform.rotation.y,
-        T_IB_->transform.rotation.z, T_IB_->transform.rotation.w,
-        T_IB_->transform.translation.x, T_IB_->transform.translation.y,
-        T_IB_->transform.translation.z);
   } else {
     ROS_DEBUG("Missing initial conditions.");
   }

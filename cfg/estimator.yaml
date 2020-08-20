@@ -1,8 +1,8 @@
 prior_noise_rot_IB: [0.35, 0.35, 0.35]
 prior_noise_I_t_B: [0.2, 0.2, 0.2]
 prior_noise_I_v_B: [0.05, 0.05, 0.05]
-prior_noise_gyro_bias: [1e-4, 1e-4, 1e-4]
-prior_noise_acc_bias: [1e-3, 1e-3, 1e-3]
+prior_noise_gyro_bias: [1.0e-4, 1.0e-4, 1.0e-4]
+prior_noise_acc_bias: [1.0e-3, 1.0e-3, 1.0e-3]
 
 position_receiver:
   # (Initial) extrinsic calibration

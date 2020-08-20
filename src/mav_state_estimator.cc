@@ -79,8 +79,9 @@ void MavStateEstimator::initializeGraph() {
     tf::quaternionMsgToEigen(T_IB_0.transform.rotation, q_IB);
 
     Eigen::Vector3d I_v_B = Eigen::Vector3d::Zero();
-    nav_state_ = gtsam::NavState(gtsam::Rot3(q_IB), I_t_B, I_v_B);
-    nav_state_.print("Initial state: ");
+    nav_state_.first = T_IB_0.header.stamp;
+    nav_state_.second = gtsam::NavState(gtsam::Rot3(q_IB), I_t_B, I_v_B);
+    nav_state_.second.print("Initial state: ");
   }
 }
 
@@ -96,9 +97,10 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     init_.addOrientationConstraint1(I_g, B_g, imu_msg->header.stamp);
     init_.setBaseFrame(imu_msg->header.frame_id);
     initializeGraph();
-  } else {
-    // Integrate IMU and publish navigation state.
+  } else if (imu_msg->header.stamp > nav_state_.first) {
+    // Integrate IMU (zero-order-hold) and publish navigation state.
   }
+  prev_imu_ = imu_msg;
 }
 
 void MavStateEstimator::posCallback(

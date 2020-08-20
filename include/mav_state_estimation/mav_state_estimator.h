@@ -1,8 +1,9 @@
 #ifndef MAV_STATE_ESTIMATOR_MAV_STATE_ESTIMATOR_H_
 #define MAV_STATE_ESTIMATOR_MAV_STATE_ESTIMATOR_H_
 
+#include <gtsam/linear/NoiseModel.h>
+#include <gtsam/navigation/CombinedImuFactor.h>
 #include <piksi_rtk_msgs/PositionWithCovarianceStamped.h>
-#include <piksi_rtk_msgs/VelocityWithCovarianceStamped.h>
 #include <ros/ros.h>
 #include <sensor_msgs/Imu.h>
 #include <tf2_ros/transform_listener.h>
@@ -41,6 +42,12 @@ class MavStateEstimator {
   Initialization init_;
   Eigen::Vector3d B_t_P_ = Eigen::Vector3d::Zero();  // Position receiver.
   Eigen::Vector3d B_t_A_ = Eigen::Vector3d::Zero();  // Attitude receiver.
+
+  // GTSAM variables.
+  void initializeGraph();
+  gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_T_I_B_;
+  gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_I_v_B_;
+  gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_imu_bias_;
 };
 
 }  // namespace mav_state_estimation

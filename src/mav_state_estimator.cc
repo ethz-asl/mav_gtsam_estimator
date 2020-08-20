@@ -9,10 +9,33 @@ namespace mav_state_estimation {
 MavStateEstimator::MavStateEstimator()
     : nh_(ros::NodeHandle()), nh_private_(ros::NodeHandle("~")) {
   // Get parameters.
+  // Initial values.
   B_t_P_ = getVectorFromParams("position_receiver/B_t");
   ROS_INFO_STREAM("Initial guess B_t_P: " << B_t_P_.transpose());
   B_t_A_ = getVectorFromParams("attitude_receiver/B_t");
   ROS_INFO_STREAM("Initial guess B_t_A: " << B_t_A_.transpose());
+
+  // Prior noise.
+  Eigen::Vector3d prior_noise_rot_IB, prior_noise_I_t_B;
+  prior_noise_rot_IB = getVectorFromParams("prior_noise_rot_IB");
+  prior_noise_I_t_B = getVectorFromParams("prior_noise_I_t_B");
+  prior_noise_model_T_I_B_ = gtsam::noiseModel::Diagonal::Sigmas(
+      (gtsam::Vector(6) << prior_noise_rot_IB, prior_noise_I_t_B).finished());
+  prior_noise_model_T_I_B_->print("prior_noise_model_T_I_B: ");
+
+  Eigen::Vector3d prior_noise_I_v_B;
+  prior_noise_I_v_B = getVectorFromParams("prior_noise_I_v_B");
+  prior_noise_model_I_v_B_ = gtsam::noiseModel::Diagonal::Sigmas(
+      (gtsam::Vector(3) << prior_noise_I_v_B).finished());
+  prior_noise_model_I_v_B_->print("prior_noise_model_I_v_B: ");
+
+  Eigen::Vector3d prior_noise_acc_bias, prior_noise_gyro_bias;
+  prior_noise_acc_bias = getVectorFromParams("prior_noise_acc_bias");
+  prior_noise_gyro_bias = getVectorFromParams("prior_noise_gyro_bias");
+  prior_noise_model_imu_bias_ = gtsam::noiseModel::Diagonal::Sigmas(
+      (gtsam::Vector(6) << prior_noise_acc_bias, prior_noise_gyro_bias)
+          .finished());
+  prior_noise_model_imu_bias_->print("prior_noise_model_imu_bias: ");
 
   // Subscribe to topics.
   const uint32_t kQueueSize = 1000;
@@ -41,6 +64,12 @@ Eigen::Vector3d MavStateEstimator::getVectorFromParams(
   return eig;
 }
 
+void MavStateEstimator::initializeGraph() {
+  geometry_msgs::TransformStamped T_IB_0;
+  if (init_.getInitialPose(&T_IB_0)) {
+  }
+}
+
 void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
   ROS_INFO_ONCE("Received first IMU message.");
   if (!init_.isInitialized()) {
@@ -52,6 +81,9 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     B_g *= -1.0;
     init_.addOrientationConstraint1(I_g, B_g, imu_msg->header.stamp);
     init_.setBaseFrame(imu_msg->header.frame_id);
+    initializeGraph();
+  } else {
+    // Integrate IMU and publish navigation state.
   }
 }
 
@@ -64,6 +96,7 @@ void MavStateEstimator::posCallback(
     tf::pointMsgToEigen(pos_msg->position.position, I_t_P);
     init_.addPositionConstraint(I_t_P, B_t_P_, pos_msg->header.stamp);
     init_.setInertialFrame(pos_msg->header.frame_id);
+    initializeGraph();
   }
 }
 
@@ -80,6 +113,7 @@ void MavStateEstimator::baselineCallback(
     // Moving baseline heading in base frame (IMU).
     Eigen::Vector3d B_h = B_t_A_ - B_t_P_;
     init_.addOrientationConstraint2(I_h, B_h, baseline_msg->header.stamp);
+    initializeGraph();
   }
 }
 

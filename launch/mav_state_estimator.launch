@@ -12,7 +12,7 @@
     <!-- Estimator -->
     <node name="mav_state_estimator" pkg="mav_state_estimation" type="mav_state_estimator" clear_params="true" output="screen">
       <remap from="imu0" to="adis16448bmlz/imu/data_raw"/>
-      <remap from="pos0" to="piksi/position_receiver_0/ros/pos_ecef_cov"/>
+      <remap from="pos0" to="piksi/position_receiver_0/ros/pos_enu_cov"/>
       <remap from="baseline0" to="piksi/attitude_receiver_0/ros/baseline_ned"/>
       <rosparam file="$(find mav_state_estimation)/cfg/estimator.yaml"/>
     </node>

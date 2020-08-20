@@ -44,8 +44,8 @@ Eigen::Vector3d MavStateEstimator::getVectorFromParams(
 void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
   ROS_INFO_ONCE("Received first IMU message.");
   if (!init_.isInitialized()) {
-    // Gravitational acceleration in inertial frame (NED).
-    Eigen::Vector3d I_g(0, 0, 9.81);
+    // Gravitational acceleration in inertial frame (ENU).
+    Eigen::Vector3d I_g(0, 0, -9.81);
     // Gravitational acceleration in base frame (IMU).
     Eigen::Vector3d B_g;
     tf::vectorMsgToEigen(imu_msg->linear_acceleration, B_g);
@@ -59,7 +59,7 @@ void MavStateEstimator::posCallback(
     const piksi_rtk_msgs::PositionWithCovarianceStamped::ConstPtr& pos_msg) {
   ROS_INFO_ONCE("Received first POS message.");
   if (!init_.isInitialized()) {
-    // GNSS antenna position in inertial frame (NED).
+    // GNSS antenna position in inertial frame (ENU).
     Eigen::Vector3d I_t_P;
     tf::pointMsgToEigen(pos_msg->position.position, I_t_P);
     init_.addPositionConstraint(I_t_P, B_t_P_, pos_msg->header.stamp);
@@ -72,9 +72,10 @@ void MavStateEstimator::baselineCallback(
         baseline_msg) {
   ROS_INFO_ONCE("Received first BASELINE message.");
   if (!init_.isInitialized()) {
-    // Moving baseline heading in inertial frame (NED).
-    Eigen::Vector3d I_h;
-    tf::pointMsgToEigen(baseline_msg->position.position, I_h);
+    // Moving baseline heading in inertial frame (ENU).
+    Eigen::Vector3d I_h_NED;
+    tf::pointMsgToEigen(baseline_msg->position.position, I_h_NED);
+    Eigen::Vector3d I_h(I_h_NED.y(), I_h_NED.x(), -I_h_NED.z());
     // Moving baseline heading in base frame (IMU).
     Eigen::Vector3d B_h = B_t_A_ - B_t_P_;
     init_.addOrientationConstraint2(I_h, B_h, baseline_msg->header.stamp);

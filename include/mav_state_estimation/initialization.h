@@ -23,6 +23,14 @@ class Initialization {
   void addPositionConstraint(const Eigen::Vector3d& I_r_P,
                              const Eigen::Vector3d& B_t_P, const ros::Time& t);
 
+  inline void setInertialFrame(const std::string id) {
+    inertial_frame_ = std::make_optional<std::string>(id);
+  }
+  inline void setBaseFrame(const std::string id) {
+    base_frame_ = std::make_optional<std::string>(id);
+  }
+
+  inline bool isInitialized() const { return T_IB_.has_value(); };
   bool getInitialPose(geometry_msgs::TransformStamped* T_IB) const;
 
  private:
@@ -39,6 +47,8 @@ class Initialization {
   std::optional<VectorPair> r_2;
   std::optional<VectorPair> p;
   ros::Time stamp_;
+  std::optional<std::string> inertial_frame_;
+  std::optional<std::string> base_frame_;
   std::optional<geometry_msgs::TransformStamped> T_IB_;
 };
 

@@ -48,6 +48,8 @@ class MavStateEstimator {
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_T_I_B_;
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_I_v_B_;
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_imu_bias_;
+  boost::shared_ptr<gtsam::PreintegratedCombinedMeasurements::Params>
+      imu_params_;
   gtsam::imuBias::ConstantBias prior_imu_bias_;
   std::pair<ros::Time, gtsam::NavState> nav_state_;
   sensor_msgs::Imu::ConstPtr prev_imu_;

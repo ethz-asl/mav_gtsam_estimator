@@ -43,6 +43,33 @@ MavStateEstimator::MavStateEstimator()
       gtsam::imuBias::ConstantBias(prior_acc_bias, prior_gyro_bias);
   prior_imu_bias_.print("prior_imu_bias: ");
 
+  double bias_acc_sigma = 0.0, bias_omega_sigma = 0.0, bias_acc_int_sigma = 0.0,
+         bias_omega_int_sigma = 0.0, acc_sigma = 0.0, integration_sigma = 0.0,
+         gyro_sigma = 0.0;
+  bool use_2nd_order_coriolis = false;
+  nh_private_.getParam("bias_acc_sigma", bias_acc_sigma);
+  nh_private_.getParam("bias_omega_sigma", bias_omega_sigma);
+  nh_private_.getParam("bias_acc_int_sigma", bias_acc_int_sigma);
+  nh_private_.getParam("bias_omega_int_sigma", bias_omega_int_sigma);
+  nh_private_.getParam("acc_sigma", acc_sigma);
+  nh_private_.getParam("integration_sigma", integration_sigma);
+  nh_private_.getParam("gyro_sigma", gyro_sigma);
+  nh_private_.getParam("use_2nd_order_coriolis", use_2nd_order_coriolis);
+
+  const gtsam::Matrix I = gtsam::eye(3, 3);
+  imu_params_ = gtsam::PreintegratedCombinedMeasurements::Params::MakeSharedU();
+  imu_params_->biasAccCovariance = I * pow(bias_acc_sigma, 2);
+  imu_params_->biasOmegaCovariance = I * pow(bias_omega_sigma, 2);
+  gtsam::Matrix bias_acc_omega_int = gtsam::zeros(6, 6);
+  bias_acc_omega_int.block<3, 3>(0, 0) = I * pow(bias_acc_int_sigma, 2);
+  bias_acc_omega_int.block<3, 3>(3, 3) = I * pow(bias_omega_int_sigma, 2);
+  imu_params_->biasAccOmegaInt = bias_acc_omega_int;
+  imu_params_->accelerometerCovariance = I * pow(acc_sigma, 2);
+  imu_params_->integrationCovariance = I * pow(integration_sigma, 2);
+  imu_params_->gyroscopeCovariance = I * pow(gyro_sigma, 2);
+  imu_params_->use2ndOrderCoriolis = use_2nd_order_coriolis;
+  imu_params_->print("IMU settings: ");
+
   // Subscribe to topics.
   const uint32_t kQueueSize = 1000;
   imu_sub_ =
@@ -99,6 +126,8 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     initializeGraph();
   } else if (imu_msg->header.stamp > nav_state_.first) {
     // Integrate IMU (zero-order-hold) and publish navigation state.
+    // PreintegratedCombinedMeasurements imu_integration(
+    //     imu.getNoiseModel().getNoiseModel(), settings_.prior_imu_bias);
   }
   prev_imu_ = imu_msg;
 }

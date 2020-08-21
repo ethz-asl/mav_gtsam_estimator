@@ -39,8 +39,9 @@ MavStateEstimator::MavStateEstimator()
   Eigen::Vector3d prior_acc_bias, prior_gyro_bias;
   prior_acc_bias = getVectorFromParams("prior_acc_bias");
   prior_gyro_bias = getVectorFromParams("prior_gyro_bias");
-  imu_bias_ = gtsam::imuBias::ConstantBias(prior_acc_bias, prior_gyro_bias);
-  imu_bias_.print("prior_imu_bias: ");
+  state_.imu_bias =
+      gtsam::imuBias::ConstantBias(prior_acc_bias, prior_gyro_bias);
+  state_.imu_bias.print("prior_imu_bias: ");
 
   double bias_acc_sigma = 0.0, bias_omega_sigma = 0.0, bias_acc_int_sigma = 0.0,
          bias_omega_int_sigma = 0.0, acc_sigma = 0.0, integration_sigma = 0.0,
@@ -69,7 +70,7 @@ MavStateEstimator::MavStateEstimator()
   imu_params_->use2ndOrderCoriolis = use_2nd_order_coriolis;
   imu_params_->print("IMU settings: ");
   imu_integration_ =
-      gtsam::PreintegratedCombinedMeasurements(imu_params_, imu_bias_);
+      gtsam::PreintegratedCombinedMeasurements(imu_params_, state_.imu_bias);
 
   // Subscribe to topics.
   const uint32_t kQueueSize = 1000;
@@ -107,9 +108,9 @@ void MavStateEstimator::initializeGraph() {
     tf::quaternionMsgToEigen(T_IB_0.transform.rotation, q_IB);
 
     Eigen::Vector3d I_v_B = Eigen::Vector3d::Zero();
-    nav_state_.first = T_IB_0.header.stamp;
-    nav_state_.second = gtsam::NavState(gtsam::Rot3(q_IB), I_t_B, I_v_B);
-    nav_state_.second.print("Initial state: ");
+    state_.stamp = T_IB_0.header.stamp;
+    state_.nav_state = gtsam::NavState(gtsam::Rot3(q_IB), I_t_B, I_v_B);
+    state_.nav_state.print("Initial state: ");
   }
 }
 
@@ -125,20 +126,21 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     init_.addOrientationConstraint1(I_g, B_g, imu_msg->header.stamp);
     init_.setBaseFrame(imu_msg->header.frame_id);
     initializeGraph();
-  } else if (imu_msg->header.stamp > nav_state_.first) {
+  } else if (imu_msg->header.stamp > state_.stamp) {
     // Integrate IMU (zero-order-hold) and publish navigation state.
     //  imu_integration_.resetIntegration();
     Eigen::Vector3d lin_acc, ang_vel;
-    tf::vectorMsgToEigen(prev_imu_->linear_acceleration, lin_acc);
-    tf::vectorMsgToEigen(prev_imu_->angular_velocity, ang_vel);
-    double dt = (imu_msg->header.stamp - prev_imu_->header.stamp).toSec();
+    tf::vectorMsgToEigen(state_.prev_imu->linear_acceleration, lin_acc);
+    tf::vectorMsgToEigen(state_.prev_imu->angular_velocity, ang_vel);
+    double dt = (imu_msg->header.stamp - state_.prev_imu->header.stamp).toSec();
     imu_integration_.integrateMeasurement(lin_acc, ang_vel, dt);
-    nav_state_.first = imu_msg->header.stamp;
-    nav_state_.second = imu_integration_.predict(nav_state_.second, imu_bias_);
-    imu_integration_.resetIntegrationAndSetBias(imu_bias_);
-    nav_state_.second.print("nav_state:\n");
+    state_.stamp = imu_msg->header.stamp;
+    state_.nav_state =
+        imu_integration_.predict(state_.nav_state, state_.imu_bias);
+    imu_integration_.resetIntegrationAndSetBias(state_.imu_bias);
+    state_.nav_state.print("nav_state:\n");
   }
-  prev_imu_ = imu_msg;
+  state_.prev_imu = imu_msg;
 }
 
 void MavStateEstimator::posCallback(

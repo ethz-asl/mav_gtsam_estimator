@@ -110,6 +110,8 @@ void MavStateEstimator::initializeGraph() {
     Eigen::Vector3d I_v_B = Eigen::Vector3d::Zero();
     state_.stamp = T_IB_0.header.stamp;
     state_.nav_state = gtsam::NavState(gtsam::Rot3(q_IB), I_t_B, I_v_B);
+    inertial_frame_ = T_IB_0.header.frame_id;
+    base_frame_ = T_IB_0.child_frame_id;
     state_.nav_state.print("Initial state: ");
   }
 }
@@ -137,6 +139,7 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     state_.stamp = imu_msg->header.stamp;
     state_.nav_state =
         imu_integration_.predict(state_.nav_state, state_.imu_bias);
+    broadcastTf(state_, base_frame_ + "_prediction");
     imu_integration_.resetIntegrationAndSetBias(state_.imu_bias);
     state_.nav_state.print("nav_state:\n");
   }
@@ -171,6 +174,19 @@ void MavStateEstimator::baselineCallback(
     init_.addOrientationConstraint2(I_h, B_h, baseline_msg->header.stamp);
     initializeGraph();
   }
+}
+
+void MavStateEstimator::broadcastTf(const State& state,
+                                    const std::string& child_frame_id) {
+  geometry_msgs::TransformStamped tf;
+  tf.header.stamp = state_.stamp;
+  tf.header.frame_id = inertial_frame_;
+  tf.child_frame_id = child_frame_id;
+
+  tf::vectorEigenToMsg(state.nav_state.position(), tf.transform.translation);
+  tf::quaternionEigenToMsg(state.nav_state.attitude().toQuaternion(),
+                           tf.transform.rotation);
+  tfb_.sendTransform(tf);
 }
 
 }  // namespace mav_state_estimation

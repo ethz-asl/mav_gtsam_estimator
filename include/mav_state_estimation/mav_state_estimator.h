@@ -6,7 +6,7 @@
 #include <piksi_rtk_msgs/PositionWithCovarianceStamped.h>
 #include <ros/ros.h>
 #include <sensor_msgs/Imu.h>
-#include <tf2_ros/transform_listener.h>
+#include <tf2_ros/transform_broadcaster.h>
 #include <Eigen/Dense>
 #include <optional>
 
@@ -19,6 +19,13 @@ class MavStateEstimator {
   MavStateEstimator();
 
  private:
+  struct State {
+    ros::Time stamp;
+    gtsam::NavState nav_state;
+    gtsam::imuBias::ConstantBias imu_bias;
+    sensor_msgs::Imu::ConstPtr prev_imu;
+  };
+
   Eigen::Vector3d getVectorFromParams(const std::string& param) const;
 
   void imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg);
@@ -28,6 +35,8 @@ class MavStateEstimator {
       const piksi_rtk_msgs::PositionWithCovarianceStamped::ConstPtr&
           baseline_msg);
 
+  void broadcastTf(const State& state, const std::string& child_frame_id);
+
   ros::NodeHandle nh_;
   ros::NodeHandle nh_private_;
 
@@ -35,13 +44,14 @@ class MavStateEstimator {
   ros::Subscriber pos_0_sub_;
   ros::Subscriber baseline_sub_;
 
-  tf2_ros::Buffer tf_buffer_;
-  tf2_ros::TransformListener tfl = tf2_ros::TransformListener(tf_buffer_);
+  tf2_ros::TransformBroadcaster tfb_;
 
   // Initial parameters.
   Initialization init_;
   Eigen::Vector3d B_t_P_ = Eigen::Vector3d::Zero();  // Position receiver.
   Eigen::Vector3d B_t_A_ = Eigen::Vector3d::Zero();  // Attitude receiver.
+  std::string inertial_frame_;
+  std::string base_frame_;
 
   // GTSAM variables.
   void initializeGraph();
@@ -51,13 +61,6 @@ class MavStateEstimator {
   boost::shared_ptr<gtsam::PreintegratedCombinedMeasurements::Params>
       imu_params_;
   gtsam::PreintegratedCombinedMeasurements imu_integration_;
-
-  struct State {
-    ros::Time stamp;
-    gtsam::NavState nav_state;
-    gtsam::imuBias::ConstantBias imu_bias;
-    sensor_msgs::Imu::ConstPtr prev_imu;
-  };
   State state_;
 };
 

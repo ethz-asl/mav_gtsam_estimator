@@ -3,7 +3,7 @@
   <arg name="mav_name" default="moa"/>
   <arg name="bag_base" default="/home/rik/data/2020_08_05_gannertshofen/estimator_development/sensors_2020-08-05-13-13-56"/>
   <arg name="record" default="true"/>
-  <arg name="visualize" default="false"/>
+  <arg name="visualize" default="true"/>
 
   <group ns="$(arg mav_name)">
     <!-- Start rosbag -->
@@ -31,7 +31,7 @@
 
     <!-- Viz -->
     <group if="$(arg visualize)">
-      <node name="rviz" pkg="rviz" type="rviz" output="screen" args="-d $(find mav_state_estimator)/cfg/rviz.rviz"/>
+      <node name="rviz" pkg="rviz" type="rviz" output="screen" args="-d $(find mav_state_estimation)/cfg/rviz_config.rviz"/>
     </group>
   </group>
 </launch>

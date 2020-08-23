@@ -64,7 +64,7 @@ class MavStateEstimator {
       imu_params_;
   gtsam::PreintegratedCombinedMeasurements imu_integration_;
   std::vector<gtsam::NavState> new_states_;
-  std::vector<gtsam::CombinedImuFactor> new_factors_;
+  std::vector<gtsam::NonlinearFactor::shared_ptr> new_factors_;
   sensor_msgs::Imu::ConstPtr prev_imu_;
   gtsam::imuBias::ConstantBias imu_bias_;
 

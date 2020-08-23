@@ -197,8 +197,11 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
       const uint32_t idx = stamp_to_idx_[next_unary_stamp_];
       ROS_INFO("Creating new IMU factor at %u.%u between index %u and %u",
                next_unary_stamp_.sec, next_unary_stamp_.nsec, idx - 1, idx);
-      new_factors_.emplace_back(X(idx - 1), V(idx - 1), X(idx), V(idx),
-                                B(idx - 1), B(idx), imu_integration_);
+      gtsam::CombinedImuFactor::shared_ptr imu_factor =
+          boost::make_shared<gtsam::CombinedImuFactor>(
+              X(idx - 1), V(idx - 1), X(idx), V(idx), B(idx - 1), B(idx),
+              imu_integration_);
+      new_factors_.push_back(imu_factor);
       new_states_.push_back(imu_state);
       imu_integration_.resetIntegrationAndSetBias(imu_bias_);
       ns_ = std::next(ns_);

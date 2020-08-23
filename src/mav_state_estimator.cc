@@ -190,14 +190,17 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
 
     // Setup new inbetween IMU factor.
     if (imu_msg->header.stamp == next_unary_stamp_) {
-      const uint32_t idx = stamp_to_idx_.rbegin()->second;
-      ROS_INFO("Creating new IMU factor at %u.%u with index %u",
-               next_unary_stamp_.sec, next_unary_stamp_.nsec, idx);
-      new_factors_.emplace_back(X(idx), V(idx), X(idx + 1), V(idx + 1), B(idx),
-                                B(idx + 1), imu_integration_);
+      // Check if another factor exists already at this time.
+      if (stamp_to_idx_.count(next_unary_stamp_) == 0) {
+        stamp_to_idx_[next_unary_stamp_] = stamp_to_idx_.rbegin()->second + 1;
+      }
+      const uint32_t idx = stamp_to_idx_[next_unary_stamp_];
+      ROS_INFO("Creating new IMU factor at %u.%u between index %u and %u",
+               next_unary_stamp_.sec, next_unary_stamp_.nsec, idx - 1, idx);
+      new_factors_.emplace_back(X(idx - 1), V(idx - 1), X(idx), V(idx),
+                                B(idx - 1), B(idx), imu_integration_);
       new_states_.push_back(imu_state);
       imu_integration_.resetIntegrationAndSetBias(imu_bias_);
-      stamp_to_idx_[next_unary_stamp_] = idx + 1;
       ns_ = std::next(ns_);
       if (ns_ == unary_times_ns_.end()) {
         ns_ = unary_times_ns_.begin();

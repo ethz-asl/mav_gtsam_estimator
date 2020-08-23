@@ -137,23 +137,16 @@ void MavStateEstimator::initializeState() {
     inertial_frame_ = T_IB_0.header.frame_id;
     base_frame_ = T_IB_0.child_frame_id;
     stamp_to_idx_[T_IB_0.header.stamp] = 0;
-    next_unary_stamp_.sec = T_IB_0.header.stamp.sec;
-    // Linear search first unary stamp that is larger than initial time.
-    ns_ = unary_times_ns_.begin();
-    next_unary_stamp_.nsec = *ns_;
-    while (next_unary_stamp_ <= T_IB_0.header.stamp) {
-      ns_ = std::next(ns_);
-      if (ns_ == unary_times_ns_.end()) {
-        next_unary_stamp_.sec += 1;
-        ns_ = unary_times_ns_.begin();
-      }
-      next_unary_stamp_.nsec = *ns_;
-    }
+    auto first_unary_time = T_IB_0.header.stamp;
+    first_unary_time.nsec =
+        *unary_times_ns_.upper_bound(T_IB_0.header.stamp.nsec);
+    assert(addUnaryStamp(first_unary_time));
     new_states_.back().print("Initial state: ");
     ROS_INFO("Initialization stamp: %u.%u", T_IB_0.header.stamp.sec,
              T_IB_0.header.stamp.nsec);
-    ROS_INFO("Next unary stamp: %u.%u", next_unary_stamp_.sec,
-             next_unary_stamp_.nsec);
+    next_imu_factor_ = std::next(stamp_to_idx_.begin());
+    ROS_INFO("Next unary stamp: %u.%u", next_imu_factor_->first.sec,
+             next_imu_factor_->first.nsec);
   }
 }
 
@@ -169,11 +162,11 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     init_.addOrientationConstraint1(I_g, B_g, imu_msg->header.stamp);
     init_.setBaseFrame(imu_msg->header.frame_id);
     initializeState();
-  } else if (imu_msg->header.stamp > next_unary_stamp_) {
+  } else if (imu_msg->header.stamp > next_imu_factor_->first) {
     // Handle dropped IMU message.
     // TODO(rikba): Linearly inpterpolate IMU message.
     sensor_msgs::Imu in_between_imu = *prev_imu_;
-    in_between_imu.header.stamp = next_unary_stamp_;
+    in_between_imu.header.stamp = next_imu_factor_->first;
     ROS_WARN("Inserting missing IMU message at %u.%u",
              in_between_imu.header.stamp.sec, in_between_imu.header.stamp.nsec);
     imuCallback(boost::make_shared<sensor_msgs::Imu>(in_between_imu));
@@ -192,12 +185,11 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     ROS_DEBUG_STREAM("IMU state: \n" << imu_state);
 
     // Setup new inbetween IMU factor.
-    if (imu_msg->header.stamp == next_unary_stamp_) {
-      // Check if another factor exists already at this time.
-      addUnaryStamp(next_unary_stamp_);
-      const uint32_t idx = stamp_to_idx_[next_unary_stamp_];
+    if (addUnaryStamp(imu_msg->header.stamp)) {
+      const uint32_t idx = stamp_to_idx_[imu_msg->header.stamp];
       ROS_INFO("Creating new IMU factor at %u.%u between index %u and %u",
-               next_unary_stamp_.sec, next_unary_stamp_.nsec, idx - 1, idx);
+               imu_msg->header.stamp.sec, imu_msg->header.stamp.nsec, idx - 1,
+               idx);
       gtsam::CombinedImuFactor::shared_ptr imu_factor =
           boost::make_shared<gtsam::CombinedImuFactor>(
               X(idx - 1), V(idx - 1), X(idx), V(idx), B(idx - 1), B(idx),
@@ -205,12 +197,10 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
       new_factors_.push_back(imu_factor);
       new_states_.push_back(imu_state);
       imu_integration_.resetIntegrationAndSetBias(imu_bias_);
-      ns_ = std::next(ns_);
-      if (ns_ == unary_times_ns_.end()) {
-        ns_ = unary_times_ns_.begin();
-        next_unary_stamp_.sec += 1;
+      next_imu_factor_ = std::next(next_imu_factor_);
+      if (next_imu_factor_ == stamp_to_idx_.end()) {
+        ROS_ERROR("Failed to get next IMU factor time.");
       }
-      next_unary_stamp_.nsec = *ns_;
     }
   } else {
     ROS_ERROR("Cannot handle IMU message.");
@@ -245,12 +235,38 @@ void MavStateEstimator::posCallback(
 }
 
 bool MavStateEstimator::addUnaryStamp(const ros::Time& stamp) {
-  bool unary_stamp_predicted = unary_times_ns_.count(stamp.nsec);
-  if (unary_stamp_predicted && stamp_to_idx_.count(stamp) == 0) {
-    stamp_to_idx_[stamp] = stamp_to_idx_.rbegin()->second + 1;
+  bool success = unary_times_ns_.count(stamp.nsec);
+  ROS_DEBUG_COND(!success,
+                 "The new stamp %u.%u is not expected as a unary factor time.",
+                 stamp.sec, stamp.nsec);
+  success &= (stamp > stamp_to_idx_.begin()->first);
+  ROS_ERROR_COND(!success,
+                 "The new stamp %u.%u is before initialization time %u.%u.",
+                 stamp.sec, stamp.nsec, stamp_to_idx_.begin()->first.sec,
+                 stamp_to_idx_.begin()->first.nsec);
+
+  // Always make sure that the previous, current, and next n seconds are part
+  // of the index lookup map already.
+  const uint8_t kIdxWindow = 1;
+  auto max_time = ros::Time(stamp.sec + kIdxWindow + 1, 0);
+  if (!stamp_to_idx_.count(max_time)) {
+    auto min_time = std::max(stamp_to_idx_.rbegin()->first,
+                             ros::Time(stamp.sec - kIdxWindow, 0));
+    auto ns = unary_times_ns_.begin();
+    while (!stamp_to_idx_.count(max_time)) {
+      if (!stamp_to_idx_.count(min_time)) {
+        stamp_to_idx_[min_time] = stamp_to_idx_.rbegin()->second + 1;
+      }
+      ns = std::next(ns);
+      if (ns == unary_times_ns_.end()) {
+        min_time.sec += 1;
+        unary_times_ns_.begin();
+      }
+      min_time.nsec = *ns;
+    }
   }
 
-  return unary_stamp_predicted;
+  return success;
 }
 
 void MavStateEstimator::baselineCallback(

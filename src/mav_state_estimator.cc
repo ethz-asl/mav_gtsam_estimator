@@ -130,20 +130,21 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     initializeGraph();
   } else if (imu_msg->header.stamp > state_.stamp) {
     // Integrate IMU (zero-order-hold) and publish navigation state.
-    //  imu_integration_.resetIntegration();
     Eigen::Vector3d lin_acc, ang_vel;
-    tf::vectorMsgToEigen(state_.prev_imu->linear_acceleration, lin_acc);
-    tf::vectorMsgToEigen(state_.prev_imu->angular_velocity, ang_vel);
-    double dt = (imu_msg->header.stamp - state_.prev_imu->header.stamp).toSec();
+    tf::vectorMsgToEigen(prev_imu_->linear_acceleration, lin_acc);
+    tf::vectorMsgToEigen(prev_imu_->angular_velocity, ang_vel);
+    double dt = (imu_msg->header.stamp - prev_imu_->header.stamp).toSec();
     imu_integration_.integrateMeasurement(lin_acc, ang_vel, dt);
-    state_.stamp = imu_msg->header.stamp;
-    state_.nav_state =
+
+    // Publish high rate IMU prediction.
+    State imu_state = state_;
+    imu_state.stamp = imu_msg->header.stamp;
+    imu_state.nav_state =
         imu_integration_.predict(state_.nav_state, state_.imu_bias);
-    broadcastTf(state_, base_frame_ + "_prediction");
-    imu_integration_.resetIntegrationAndSetBias(state_.imu_bias);
-    state_.nav_state.print("nav_state:\n");
+    broadcastTf(imu_state, base_frame_ + "_prediction");
+    imu_state.nav_state.print("nav_state:\n");
   }
-  state_.prev_imu = imu_msg;
+  prev_imu_ = imu_msg;
 }
 
 void MavStateEstimator::posCallback(

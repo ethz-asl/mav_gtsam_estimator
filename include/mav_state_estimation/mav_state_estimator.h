@@ -23,7 +23,6 @@ class MavStateEstimator {
     ros::Time stamp;
     gtsam::NavState nav_state;
     gtsam::imuBias::ConstantBias imu_bias;
-    sensor_msgs::Imu::ConstPtr prev_imu;
   };
 
   Eigen::Vector3d getVectorFromParams(const std::string& param) const;
@@ -61,6 +60,7 @@ class MavStateEstimator {
   boost::shared_ptr<gtsam::PreintegratedCombinedMeasurements::Params>
       imu_params_;
   gtsam::PreintegratedCombinedMeasurements imu_integration_;
+  sensor_msgs::Imu::ConstPtr prev_imu_;
   State state_;
 };
 

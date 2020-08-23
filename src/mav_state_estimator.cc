@@ -230,8 +230,9 @@ void MavStateEstimator::posCallback(
     initializeState();
   } else if (addUnaryStamp(pos_msg->header.stamp)) {
     const uint32_t idx = stamp_to_idx_[pos_msg->header.stamp];
+    const bool kSmart = false;
     auto cov = gtsam::noiseModel::Gaussian::Covariance(
-        Matrix3dRow::Map(pos_msg->position.covariance.data()));
+        Matrix3dRow::Map(pos_msg->position.covariance.data()), kSmart);
     AbsolutePositionFactor::shared_ptr pos_factor =
         boost::make_shared<AbsolutePositionFactor>(X(idx), I_t_P, B_t_P_, cov);
     new_factors_.push_back(pos_factor);

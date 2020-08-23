@@ -133,6 +133,7 @@ void MavStateEstimator::initializeState() {
     new_states_.emplace_back(gtsam::Rot3(q_IB), I_t_B, I_v_B);
     inertial_frame_ = T_IB_0.header.frame_id;
     base_frame_ = T_IB_0.child_frame_id;
+    stamp_to_idx_[T_IB_0.header.stamp] = 0;
     next_unary_stamp_.sec = T_IB_0.header.stamp.sec;
     // Linear search first unary stamp that is larger than initial time.
     ns_ = unary_times_ns_.begin();
@@ -189,13 +190,14 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
 
     // Setup new inbetween IMU factor.
     if (imu_msg->header.stamp == next_unary_stamp_) {
-      ROS_INFO("Creating new IMU factor at %u.%u", next_unary_stamp_.sec,
-               next_unary_stamp_.nsec);
-      new_imus_.emplace_back(X(idx_), V(idx_), X(idx_ + 1), V(idx_ + 1),
-                             B(idx_), B(idx_ + 1), imu_integration_);
+      const uint32_t idx = stamp_to_idx_.rbegin()->second;
+      ROS_INFO("Creating new IMU factor at %u.%u with index %u",
+               next_unary_stamp_.sec, next_unary_stamp_.nsec, idx);
+      new_factors_.emplace_back(X(idx), V(idx), X(idx + 1), V(idx + 1), B(idx),
+                                B(idx + 1), imu_integration_);
       new_states_.push_back(imu_state);
       imu_integration_.resetIntegrationAndSetBias(imu_bias_);
-      idx_++;
+      stamp_to_idx_[next_unary_stamp_] = idx + 1;
       ns_ = std::next(ns_);
       if (ns_ == unary_times_ns_.end()) {
         ns_ = unary_times_ns_.begin();

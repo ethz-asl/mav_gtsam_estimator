@@ -59,14 +59,16 @@ class MavStateEstimator {
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_I_v_B_;
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_imu_bias_;
   gtsam::NonlinearFactorGraph graph_;
-  uint32_t idx_ = 0;
+  std::map<ros::Time, uint32_t> stamp_to_idx_;
   boost::shared_ptr<gtsam::PreintegratedCombinedMeasurements::Params>
       imu_params_;
   gtsam::PreintegratedCombinedMeasurements imu_integration_;
   std::vector<gtsam::NavState> new_states_;
-  std::vector<gtsam::CombinedImuFactor> new_imus_;
+  std::vector<gtsam::CombinedImuFactor> new_factors_;
   sensor_msgs::Imu::ConstPtr prev_imu_;
   gtsam::imuBias::ConstantBias imu_bias_;
+
+  std::vector<gtsam::Factor> factors_;
 };
 
 }  // namespace mav_state_estimation

@@ -4,10 +4,13 @@
 #include <geometry_msgs/TransformStamped.h>
 #include <gtsam/inference/Symbol.h>
 #include <ros/ros.h>
+#include "mav_state_estimation/absolute_position_factor.h"
 
 using gtsam::symbol_shorthand::B;  // Bias  (ax,ay,az,gx,gy,gz)
 using gtsam::symbol_shorthand::V;  // Vel   (xdot,ydot,zdot)
 using gtsam::symbol_shorthand::X;  // Pose3 (x,y,z,r,p,y)
+
+typedef Eigen::Matrix<double, 3, 3, Eigen::RowMajor> Matrix3dRow;
 
 namespace mav_state_estimation {
 
@@ -191,9 +194,7 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     // Setup new inbetween IMU factor.
     if (imu_msg->header.stamp == next_unary_stamp_) {
       // Check if another factor exists already at this time.
-      if (stamp_to_idx_.count(next_unary_stamp_) == 0) {
-        stamp_to_idx_[next_unary_stamp_] = stamp_to_idx_.rbegin()->second + 1;
-      }
+      addUnaryStamp(next_unary_stamp_);
       const uint32_t idx = stamp_to_idx_[next_unary_stamp_];
       ROS_INFO("Creating new IMU factor at %u.%u between index %u and %u",
                next_unary_stamp_.sec, next_unary_stamp_.nsec, idx - 1, idx);
@@ -220,14 +221,35 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
 void MavStateEstimator::posCallback(
     const piksi_rtk_msgs::PositionWithCovarianceStamped::ConstPtr& pos_msg) {
   ROS_INFO_ONCE("Received first POS message.");
+  Eigen::Vector3d I_t_P;
+  tf::pointMsgToEigen(pos_msg->position.position, I_t_P);
   if (!init_.isInitialized()) {
     // GNSS antenna position in inertial frame (ENU).
-    Eigen::Vector3d I_t_P;
-    tf::pointMsgToEigen(pos_msg->position.position, I_t_P);
     init_.addPositionConstraint(I_t_P, B_t_P_, pos_msg->header.stamp);
     init_.setInertialFrame(pos_msg->header.frame_id);
     initializeState();
+  } else if (addUnaryStamp(pos_msg->header.stamp)) {
+    const uint32_t idx = stamp_to_idx_[pos_msg->header.stamp];
+    auto cov = gtsam::noiseModel::Gaussian::Covariance(
+        Matrix3dRow::Map(pos_msg->position.covariance.data()));
+    AbsolutePositionFactor::shared_ptr pos_factor =
+        boost::make_shared<AbsolutePositionFactor>(X(idx), I_t_P, B_t_P_, cov);
+    new_factors_.push_back(pos_factor);
+    ROS_INFO("Added new position factor at %u.%u and index %u",
+             pos_msg->header.stamp.sec, pos_msg->header.stamp.nsec, idx);
+    pos_factor->print("New factor: \n");
+  } else {
+    ROS_ERROR("Failed to add unary position factor.");
   }
+}
+
+bool MavStateEstimator::addUnaryStamp(const ros::Time& stamp) {
+  bool unary_stamp_predicted = unary_times_ns_.count(stamp.nsec);
+  if (unary_stamp_predicted && stamp_to_idx_.count(stamp) == 0) {
+    stamp_to_idx_[stamp] = stamp_to_idx_.rbegin()->second + 1;
+  }
+
+  return unary_stamp_predicted;
 }
 
 void MavStateEstimator::baselineCallback(

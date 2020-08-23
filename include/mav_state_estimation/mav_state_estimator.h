@@ -33,6 +33,7 @@ class MavStateEstimator {
   void broadcastTf(const gtsam::NavState& state, const ros::Time& stamp,
                    const std::string& child_frame_id);
   void addSensorTimes(const uint16_t rate);
+  bool addUnaryStamp(const ros::Time& stamp);
 
   ros::NodeHandle nh_;
   ros::NodeHandle nh_private_;

@@ -2,7 +2,12 @@
 
 #include <eigen_conversions/eigen_msg.h>
 #include <geometry_msgs/TransformStamped.h>
+#include <gtsam/inference/Symbol.h>
 #include <ros/ros.h>
+
+using gtsam::symbol_shorthand::B;  // Bias  (ax,ay,az,gx,gy,gz)
+using gtsam::symbol_shorthand::V;  // Vel   (xdot,ydot,zdot)
+using gtsam::symbol_shorthand::X;  // Pose3 (x,y,z,r,p,y)
 
 namespace mav_state_estimation {
 
@@ -12,8 +17,14 @@ MavStateEstimator::MavStateEstimator()
   // Initial values.
   B_t_P_ = getVectorFromParams("position_receiver/B_t");
   ROS_INFO_STREAM("Initial guess B_t_P: " << B_t_P_.transpose());
+  int rate = 0;
+  nh_private_.getParam("position_receiver/rate", rate);
+  addSensorTimes(rate);
+
   B_t_A_ = getVectorFromParams("attitude_receiver/B_t");
   ROS_INFO_STREAM("Initial guess B_t_A: " << B_t_A_.transpose());
+  nh_private_.getParam("attitude_receiver/rate", rate);
+  addSensorTimes(rate);
 
   Eigen::Vector3d prior_noise_rot_IB, prior_noise_I_t_B;
   prior_noise_rot_IB = getVectorFromParams("prior_noise_rot_IB");
@@ -39,9 +50,8 @@ MavStateEstimator::MavStateEstimator()
   Eigen::Vector3d prior_acc_bias, prior_gyro_bias;
   prior_acc_bias = getVectorFromParams("prior_acc_bias");
   prior_gyro_bias = getVectorFromParams("prior_gyro_bias");
-  state_.imu_bias =
-      gtsam::imuBias::ConstantBias(prior_acc_bias, prior_gyro_bias);
-  state_.imu_bias.print("prior_imu_bias: ");
+  imu_bias_ = gtsam::imuBias::ConstantBias(prior_acc_bias, prior_gyro_bias);
+  imu_bias_.print("prior_imu_bias: ");
 
   double bias_acc_sigma = 0.0, bias_omega_sigma = 0.0, bias_acc_int_sigma = 0.0,
          bias_omega_int_sigma = 0.0, acc_sigma = 0.0, integration_sigma = 0.0,
@@ -70,7 +80,7 @@ MavStateEstimator::MavStateEstimator()
   imu_params_->use2ndOrderCoriolis = use_2nd_order_coriolis;
   imu_params_->print("IMU settings: ");
   imu_integration_ =
-      gtsam::PreintegratedCombinedMeasurements(imu_params_, state_.imu_bias);
+      gtsam::PreintegratedCombinedMeasurements(imu_params_, imu_bias_);
 
   // Subscribe to topics.
   const uint32_t kQueueSize = 1000;
@@ -99,7 +109,19 @@ Eigen::Vector3d MavStateEstimator::getVectorFromParams(
   return eig;
 }
 
-void MavStateEstimator::initializeGraph() {
+void MavStateEstimator::addSensorTimes(const uint16_t rate) {
+  uint32_t period = 1e9 / rate;
+  uint32_t ns = 0;
+  while (ns < 1e9) {
+    auto success = unary_times_ns_.insert(ns);
+    if (success.second) {
+      ROS_INFO("Inserted new sensor time: %u", ns);
+    }
+    ns += period;
+  }
+}
+
+void MavStateEstimator::initializeState() {
   geometry_msgs::TransformStamped T_IB_0;
   if (init_.getInitialPose(&T_IB_0)) {
     Eigen::Vector3d I_t_B;
@@ -108,11 +130,26 @@ void MavStateEstimator::initializeGraph() {
     tf::quaternionMsgToEigen(T_IB_0.transform.rotation, q_IB);
 
     Eigen::Vector3d I_v_B = Eigen::Vector3d::Zero();
-    state_.stamp = T_IB_0.header.stamp;
-    state_.nav_state = gtsam::NavState(gtsam::Rot3(q_IB), I_t_B, I_v_B);
+    new_states_.emplace_back(gtsam::Rot3(q_IB), I_t_B, I_v_B);
     inertial_frame_ = T_IB_0.header.frame_id;
     base_frame_ = T_IB_0.child_frame_id;
-    state_.nav_state.print("Initial state: ");
+    next_unary_stamp_.sec = T_IB_0.header.stamp.sec;
+    // Linear search first unary stamp that is larger than initial time.
+    ns_ = unary_times_ns_.begin();
+    next_unary_stamp_.nsec = *ns_;
+    while (next_unary_stamp_ <= T_IB_0.header.stamp) {
+      ns_ = std::next(ns_);
+      if (ns_ == unary_times_ns_.end()) {
+        next_unary_stamp_.sec += 1;
+        ns_ = unary_times_ns_.begin();
+      }
+      next_unary_stamp_.nsec = *ns_;
+    }
+    new_states_.back().print("Initial state: ");
+    ROS_INFO("Initialization stamp: %u.%u", T_IB_0.header.stamp.sec,
+             T_IB_0.header.stamp.nsec);
+    ROS_INFO("Next unary stamp: %u.%u", next_unary_stamp_.sec,
+             next_unary_stamp_.nsec);
   }
 }
 
@@ -127,9 +164,17 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     B_g *= -1.0;
     init_.addOrientationConstraint1(I_g, B_g, imu_msg->header.stamp);
     init_.setBaseFrame(imu_msg->header.frame_id);
-    initializeGraph();
-  } else if (imu_msg->header.stamp > state_.stamp) {
-    // Integrate IMU (zero-order-hold) and publish navigation state.
+    initializeState();
+  } else if (imu_msg->header.stamp > next_unary_stamp_) {
+    // Handle dropped IMU message.
+    // TODO(rikba): Linearly inpterpolate IMU message.
+    sensor_msgs::Imu in_between_imu = *prev_imu_;
+    in_between_imu.header.stamp = next_unary_stamp_;
+    ROS_WARN("Inserting missing IMU message at %u.%u",
+             in_between_imu.header.stamp.sec, in_between_imu.header.stamp.nsec);
+    imuCallback(boost::make_shared<sensor_msgs::Imu>(in_between_imu));
+  } else if (imu_msg->header.stamp > prev_imu_->header.stamp) {
+    // Integrate IMU (zero-order-hold).
     Eigen::Vector3d lin_acc, ang_vel;
     tf::vectorMsgToEigen(prev_imu_->linear_acceleration, lin_acc);
     tf::vectorMsgToEigen(prev_imu_->angular_velocity, ang_vel);
@@ -137,12 +182,29 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     imu_integration_.integrateMeasurement(lin_acc, ang_vel, dt);
 
     // Publish high rate IMU prediction.
-    State imu_state = state_;
-    imu_state.stamp = imu_msg->header.stamp;
-    imu_state.nav_state =
-        imu_integration_.predict(state_.nav_state, state_.imu_bias);
-    broadcastTf(imu_state, base_frame_ + "_prediction");
-    imu_state.nav_state.print("nav_state:\n");
+    gtsam::NavState imu_state =
+        imu_integration_.predict(new_states_.back(), imu_bias_);
+    broadcastTf(imu_state, imu_msg->header.stamp, base_frame_ + "_prediction");
+    ROS_DEBUG_STREAM("IMU state: \n" << imu_state);
+
+    // Setup new inbetween IMU factor.
+    if (imu_msg->header.stamp == next_unary_stamp_) {
+      ROS_INFO("Creating new IMU factor at %u.%u", next_unary_stamp_.sec,
+               next_unary_stamp_.nsec);
+      new_imus_.emplace_back(X(idx_), V(idx_), X(idx_ + 1), V(idx_ + 1),
+                             B(idx_), B(idx_ + 1), imu_integration_);
+      new_states_.push_back(imu_state);
+      imu_integration_.resetIntegrationAndSetBias(imu_bias_);
+      idx_++;
+      ns_ = std::next(ns_);
+      if (ns_ == unary_times_ns_.end()) {
+        ns_ = unary_times_ns_.begin();
+        next_unary_stamp_.sec += 1;
+      }
+      next_unary_stamp_.nsec = *ns_;
+    }
+  } else {
+    ROS_ERROR("Cannot handle IMU message.");
   }
   prev_imu_ = imu_msg;
 }
@@ -156,7 +218,7 @@ void MavStateEstimator::posCallback(
     tf::pointMsgToEigen(pos_msg->position.position, I_t_P);
     init_.addPositionConstraint(I_t_P, B_t_P_, pos_msg->header.stamp);
     init_.setInertialFrame(pos_msg->header.frame_id);
-    initializeGraph();
+    initializeState();
   }
 }
 
@@ -173,19 +235,20 @@ void MavStateEstimator::baselineCallback(
     // Moving baseline heading in base frame (IMU).
     Eigen::Vector3d B_h = B_t_A_ - B_t_P_;
     init_.addOrientationConstraint2(I_h, B_h, baseline_msg->header.stamp);
-    initializeGraph();
+    initializeState();
   }
 }
 
-void MavStateEstimator::broadcastTf(const State& state,
+void MavStateEstimator::broadcastTf(const gtsam::NavState& state,
+                                    const ros::Time& stamp,
                                     const std::string& child_frame_id) {
   geometry_msgs::TransformStamped tf;
-  tf.header.stamp = state_.stamp;
+  tf.header.stamp = stamp;
   tf.header.frame_id = inertial_frame_;
   tf.child_frame_id = child_frame_id;
 
-  tf::vectorEigenToMsg(state.nav_state.position(), tf.transform.translation);
-  tf::quaternionEigenToMsg(state.nav_state.attitude().toQuaternion(),
+  tf::vectorEigenToMsg(state.position(), tf.transform.translation);
+  tf::quaternionEigenToMsg(state.attitude().toQuaternion(),
                            tf.transform.rotation);
   tfb_.sendTransform(tf);
 }

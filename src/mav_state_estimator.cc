@@ -211,6 +211,16 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
       initial_values_.insert(B(idx), imu_bias_);
       prev_unary_state_ = imu_state;
 
+      // Transfer all new unary factors to new factors if IMU inbetween factor
+      // exists already.
+      auto it = new_unary_factors_.begin();
+      while (it != new_unary_factors_.end() && it->first <= idx) {
+        it->second->print("New factor: \n");
+        new_factors_.push_back(it->second);
+        it = std::next(it);
+        new_unary_factors_.pop_front();
+      }
+
       // Attempt to run solver thread.
       solve();
     }
@@ -237,10 +247,9 @@ void MavStateEstimator::posCallback(
         Matrix3dRow::Map(pos_msg->position.covariance.data()), kSmart);
     AbsolutePositionFactor::shared_ptr pos_factor =
         boost::make_shared<AbsolutePositionFactor>(X(idx), I_t_P, B_t_P_, cov);
-    new_factors_.push_back(pos_factor);
+    new_unary_factors_.emplace_back(idx, pos_factor);
     ROS_INFO("Added new position factor at %u.%u and index %u",
              pos_msg->header.stamp.sec, pos_msg->header.stamp.nsec, idx);
-    pos_factor->print("New factor: \n");
   } else {
     ROS_ERROR("Failed to add unary position factor.");
   }

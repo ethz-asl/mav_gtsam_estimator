@@ -2,7 +2,7 @@
 <launch>
   <arg name="mav_name" default="moa"/>
   <arg name="bag_base" default="/home/rik/data/2020_08_05_gannertshofen/estimator_development/sensors_2020-08-05-13-13-56"/>
-  <arg name="record" default="true"/>
+  <arg name="record" default="false"/>
   <arg name="visualize" default="true"/>
 
   <group ns="$(arg mav_name)">

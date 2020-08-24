@@ -319,8 +319,9 @@ MavStateEstimator::~MavStateEstimator() {
 void MavStateEstimator::solve() {
   // Check for new result.
   if (solver_thread_.joinable()) {
+    solver_thread_.join();
     if (optimizer_) {
-      optimizer_->values().print("New solution.");
+      optimizer_->values().print("New solution.\n");
     }
   } else if (solver_thread_.get_id() == std::thread::id()) {
     ROS_INFO("Starting thread for the first time.");

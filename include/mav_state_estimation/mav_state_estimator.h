@@ -80,6 +80,8 @@ class MavStateEstimator {
   gtsam::Values initial_values_;
 
   void solve();
+
+  void solveThreaded();
 };
 
 }  // namespace mav_state_estimation

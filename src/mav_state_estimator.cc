@@ -140,11 +140,13 @@ void MavStateEstimator::initializeState() {
     auto first_unary_time = T_IB_0.header.stamp;
     first_unary_time.nsec =
         *unary_times_ns_.upper_bound(T_IB_0.header.stamp.nsec);
-    assert(addUnaryStamp(first_unary_time));
+    bool initialized_stamps = addUnaryStamp(first_unary_time);
+    assert(initialized_stamps);
     new_states_.back().print("Initial state: ");
     ROS_INFO("Initialization stamp: %u.%u", T_IB_0.header.stamp.sec,
              T_IB_0.header.stamp.nsec);
     next_imu_factor_ = std::next(stamp_to_idx_.begin());
+    assert(next_imu_factor_ != stamp_to_idx_.end());
     ROS_INFO("Next unary stamp: %u.%u", next_imu_factor_->first.sec,
              next_imu_factor_->first.nsec);
   }
@@ -235,15 +237,15 @@ void MavStateEstimator::posCallback(
 }
 
 bool MavStateEstimator::addUnaryStamp(const ros::Time& stamp) {
-  bool success = unary_times_ns_.count(stamp.nsec);
-  ROS_DEBUG_COND(!success,
-                 "The new stamp %u.%u is not expected as a unary factor time.",
-                 stamp.sec, stamp.nsec);
-  success &= (stamp > stamp_to_idx_.begin()->first);
-  ROS_ERROR_COND(!success,
+  bool valid = (stamp >= stamp_to_idx_.begin()->first);
+  ROS_ERROR_COND(!valid,
                  "The new stamp %u.%u is before initialization time %u.%u.",
                  stamp.sec, stamp.nsec, stamp_to_idx_.begin()->first.sec,
                  stamp_to_idx_.begin()->first.nsec);
+  bool is_unary = valid & unary_times_ns_.count(stamp.nsec);
+  ROS_DEBUG_COND(!is_unary,
+                 "The new stamp %u.%u is not expected as a unary factor time.",
+                 stamp.sec, stamp.nsec);
 
   // Always make sure that the previous, current, and next n seconds are part
   // of the index lookup map already.
@@ -260,13 +262,13 @@ bool MavStateEstimator::addUnaryStamp(const ros::Time& stamp) {
       ns = std::next(ns);
       if (ns == unary_times_ns_.end()) {
         min_time.sec += 1;
-        unary_times_ns_.begin();
+        ns = unary_times_ns_.begin();
       }
       min_time.nsec = *ns;
     }
   }
 
-  return success;
+  return is_unary;
 }
 
 void MavStateEstimator::baselineCallback(

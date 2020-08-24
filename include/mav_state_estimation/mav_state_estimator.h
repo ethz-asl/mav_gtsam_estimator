@@ -1,8 +1,7 @@
 #ifndef MAV_STATE_ESTIMATOR_MAV_STATE_ESTIMATOR_H_
 #define MAV_STATE_ESTIMATOR_MAV_STATE_ESTIMATOR_H_
 
-#include <atomic>
-#include <thread>
+#include <future>
 
 #include <gtsam/linear/NoiseModel.h>
 #include <gtsam/navigation/CombinedImuFactor.h>
@@ -24,7 +23,6 @@ class MavStateEstimator {
  public:
   MavStateEstimator();
   ~MavStateEstimator();
-  bool isSolving() const;
 
  private:
   Eigen::Vector3d getVectorFromParams(const std::string& param) const;
@@ -74,12 +72,13 @@ class MavStateEstimator {
   gtsam::NavState prev_unary_state_;
 
   // Extra thread to solve factor graph.
-  std::thread solver_thread_;
-  std::atomic_bool thread_exit_requested_ = false;
+  std::future<const gtsam::Values&> future_result_;
   gtsam::NonlinearFactorGraph graph_;
+  gtsam::LevenbergMarquardtOptimizer::shared_ptr optimizer_;
   gtsam::Values initial_values_;
 
   void solve();
+  void solveThreaded(std::promise<gtsam::Values>&& prms);
 };
 
 }  // namespace mav_state_estimation

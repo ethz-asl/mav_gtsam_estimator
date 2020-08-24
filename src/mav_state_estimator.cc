@@ -1,3 +1,5 @@
+#include <chrono>
+
 #include "mav_state_estimation/mav_state_estimator.h"
 
 #include <eigen_conversions/eigen_msg.h>
@@ -210,6 +212,9 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
       initial_values_.insert(V(idx), imu_state.v());
       initial_values_.insert(B(idx), imu_bias_);
       prev_unary_state_ = imu_state;
+
+      // Attempt to run solver thread.
+      solve();
     }
   } else {
     ROS_ERROR("Cannot handle IMU message.");
@@ -309,34 +314,38 @@ void MavStateEstimator::broadcastTf(const gtsam::NavState& state,
   tfb_.sendTransform(tf);
 }
 
-MavStateEstimator::~MavStateEstimator() {
-  thread_exit_requested_.store(true);
-  if (solver_thread_.joinable()) solver_thread_.join();
-}
-
-bool MavStateEstimator::isSolving() const {
-  return !thread_exit_requested_.load();
-}
+MavStateEstimator::~MavStateEstimator() { future_result_.get(); }
 
 void MavStateEstimator::solve() {
-  // Setting thread_exit_requested_ will terminate the thread.
-  while (!thread_exit_requested_.load()) {
-    if (new_factors_.empty()) {
-      ros::spinOnce();
-      continue;
-    }
-    // Add new factors to graph.
-    for (auto factor : new_factors_) {
-      graph_.add(factor);
-    }
-    new_factors_.clear();
+  // Check async task.
+  if (future_result_.valid()) {
+    const auto fs = future_result_.wait_for(chrono::seconds(0));
 
-    // Solve.
-    gtsam::LevenbergMarquardtOptimizer optimizer(graph_, initial_values_);
-    auto result = optimizer.optimize();
-
-    // Update most recent solution.
+    if (fs == future_status::ready) {
+      future_result_.get().print("New solution:\n");
+    } else {
+      ROS_INFO("Still solving.");
+      return;
+    }
   }
+
+  if (new_factors_.empty()) {
+    return;
+  }
+
+  // Add new factors to graph.
+  for (auto factor : new_factors_) {
+    graph_.add(factor);
+  }
+  new_factors_.clear();
+
+  // Solve.
+  optimizer_ = boost::make_shared<gtsam::LevenbergMarquardtOptimizer>(
+      graph_, initial_values_);
+  future_result_ =
+      std::async(&gtsam::LevenbergMarquardtOptimizer::optimize, optimizer_);
+
+  // Update most recent solution.
 }
 
 }  // namespace mav_state_estimation

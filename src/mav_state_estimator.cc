@@ -131,9 +131,14 @@ void MavStateEstimator::initializeState() {
     Eigen::Quaterniond q_IB;
     tf::vectorMsgToEigen(T_IB_0.transform.translation, I_t_B);
     tf::quaternionMsgToEigen(T_IB_0.transform.rotation, q_IB);
-
     Eigen::Vector3d I_v_B = Eigen::Vector3d::Zero();
-    new_states_.emplace_back(gtsam::Rot3(q_IB), I_t_B, I_v_B);
+
+    gtsam::Pose3 T_IB(gtsam::Rot3(q_IB), I_t_B);
+    initial_values_.insert(X(0), T_IB);
+    initial_values_.insert(V(0), I_v_B);
+    initial_values_.insert(B(0), imu_bias_);
+    prev_unary_state_ = gtsam::NavState(T_IB, I_v_B);
+
     inertial_frame_ = T_IB_0.header.frame_id;
     base_frame_ = T_IB_0.child_frame_id;
     stamp_to_idx_[T_IB_0.header.stamp] = 0;
@@ -142,7 +147,7 @@ void MavStateEstimator::initializeState() {
         *unary_times_ns_.upper_bound(T_IB_0.header.stamp.nsec);
     bool initialized_stamps = addUnaryStamp(first_unary_time);
     assert(initialized_stamps);
-    new_states_.back().print("Initial state: ");
+    initial_values_.print("Initial state: ");
     ROS_INFO("Initialization stamp: %u.%u", T_IB_0.header.stamp.sec,
              T_IB_0.header.stamp.nsec);
     next_imu_factor_ = std::next(stamp_to_idx_.begin());
@@ -182,13 +187,13 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
 
     // Publish high rate IMU prediction.
     gtsam::NavState imu_state =
-        imu_integration_.predict(new_states_.back(), imu_bias_);
+        imu_integration_.predict(prev_unary_state_, imu_bias_);
     broadcastTf(imu_state, imu_msg->header.stamp, base_frame_ + "_prediction");
     ROS_DEBUG_STREAM("IMU state: \n" << imu_state);
 
     // Setup new inbetween IMU factor.
     if (addUnaryStamp(imu_msg->header.stamp)) {
-      const uint32_t idx = stamp_to_idx_[imu_msg->header.stamp];
+      uint32_t idx = stamp_to_idx_[imu_msg->header.stamp];
       ROS_INFO("Creating new IMU factor at %u.%u between index %u and %u",
                imu_msg->header.stamp.sec, imu_msg->header.stamp.nsec, idx - 1,
                idx);
@@ -197,12 +202,14 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
               X(idx - 1), V(idx - 1), X(idx), V(idx), B(idx - 1), B(idx),
               imu_integration_);
       new_factors_.push_back(imu_factor);
-      new_states_.push_back(imu_state);
       imu_integration_.resetIntegrationAndSetBias(imu_bias_);
       next_imu_factor_ = std::next(next_imu_factor_);
-      if (next_imu_factor_ == stamp_to_idx_.end()) {
-        ROS_ERROR("Failed to get next IMU factor time.");
-      }
+      assert(next_imu_factor_ == stamp_to_idx_.end());
+
+      initial_values_.insert(X(idx), imu_state.pose());
+      initial_values_.insert(V(idx), imu_state.v());
+      initial_values_.insert(B(idx), imu_bias_);
+      prev_unary_state_ = imu_state;
     }
   } else {
     ROS_ERROR("Cannot handle IMU message.");
@@ -300,6 +307,36 @@ void MavStateEstimator::broadcastTf(const gtsam::NavState& state,
   tf::quaternionEigenToMsg(state.attitude().toQuaternion(),
                            tf.transform.rotation);
   tfb_.sendTransform(tf);
+}
+
+MavStateEstimator::~MavStateEstimator() {
+  thread_exit_requested_.store(true);
+  if (solver_thread_.joinable()) solver_thread_.join();
+}
+
+bool MavStateEstimator::isSolving() const {
+  return !thread_exit_requested_.load();
+}
+
+void MavStateEstimator::solve() {
+  // Setting thread_exit_requested_ will terminate the thread.
+  while (!thread_exit_requested_.load()) {
+    if (new_factors_.empty()) {
+      ros::spinOnce();
+      continue;
+    }
+    // Add new factors to graph.
+    for (auto factor : new_factors_) {
+      graph_.add(factor);
+    }
+    new_factors_.clear();
+
+    // Solve.
+    gtsam::LevenbergMarquardtOptimizer optimizer(graph_, initial_values_);
+    auto result = optimizer.optimize();
+
+    // Update most recent solution.
+  }
 }
 
 }  // namespace mav_state_estimation

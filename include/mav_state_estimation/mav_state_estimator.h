@@ -1,16 +1,20 @@
 #ifndef MAV_STATE_ESTIMATOR_MAV_STATE_ESTIMATOR_H_
 #define MAV_STATE_ESTIMATOR_MAV_STATE_ESTIMATOR_H_
 
+#include <atomic>
+#include <thread>
+
 #include <gtsam/linear/NoiseModel.h>
 #include <gtsam/navigation/CombinedImuFactor.h>
+#include <gtsam/navigation/NavState.h>
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
+#include <gtsam/nonlinear/NonlinearFactor.h>
 #include <gtsam/nonlinear/Values.h>
 #include <piksi_rtk_msgs/PositionWithCovarianceStamped.h>
 #include <ros/ros.h>
 #include <sensor_msgs/Imu.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <Eigen/Dense>
-#include <optional>
 
 #include "mav_state_estimation/initialization.h"
 
@@ -19,6 +23,8 @@ namespace mav_state_estimation {
 class MavStateEstimator {
  public:
   MavStateEstimator();
+  ~MavStateEstimator();
+  bool isSolving() const;
 
  private:
   Eigen::Vector3d getVectorFromParams(const std::string& param) const;
@@ -59,14 +65,21 @@ class MavStateEstimator {
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_T_I_B_;
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_I_v_B_;
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_imu_bias_;
-  gtsam::NonlinearFactorGraph graph_;
   boost::shared_ptr<gtsam::PreintegratedCombinedMeasurements::Params>
       imu_params_;
   gtsam::PreintegratedCombinedMeasurements imu_integration_;
-  std::vector<gtsam::NavState> new_states_;
   std::vector<gtsam::NonlinearFactor::shared_ptr> new_factors_;
   sensor_msgs::Imu::ConstPtr prev_imu_;
   gtsam::imuBias::ConstantBias imu_bias_;
+  gtsam::NavState prev_unary_state_;
+
+  // Extra thread to solve factor graph.
+  std::thread solver_thread_;
+  std::atomic_bool thread_exit_requested_ = false;
+  gtsam::NonlinearFactorGraph graph_;
+  gtsam::Values initial_values_;
+
+  void solve();
 };
 
 }  // namespace mav_state_estimation

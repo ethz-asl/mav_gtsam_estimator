@@ -1,5 +1,3 @@
-#include <chrono>
-
 #include "mav_state_estimation/mav_state_estimator.h"
 
 #include <eigen_conversions/eigen_msg.h>
@@ -314,22 +312,25 @@ void MavStateEstimator::broadcastTf(const gtsam::NavState& state,
   tfb_.sendTransform(tf);
 }
 
-MavStateEstimator::~MavStateEstimator() { future_result_.get(); }
+MavStateEstimator::~MavStateEstimator() {
+  if (solver_thread_.joinable()) solver_thread_.join();
+}
 
 void MavStateEstimator::solve() {
-  // Check async task.
-  if (future_result_.valid()) {
-    const auto fs = future_result_.wait_for(chrono::seconds(0));
-
-    if (fs == future_status::ready) {
-      future_result_.get().print("New solution:\n");
-    } else {
-      ROS_INFO("Still solving.");
-      return;
+  // Check for new result.
+  if (solver_thread_.joinable()) {
+    if (optimizer_) {
+      optimizer_->values().print("New solution.");
     }
+  } else if (solver_thread_.get_id() == std::thread::id()) {
+    ROS_INFO("Starting thread for the first time.");
+  } else {
+    ROS_INFO("Still solving.");
+    return;  // Still solving.
   }
 
   if (new_factors_.empty()) {
+    ROS_WARN("No new factors.");
     return;
   }
 
@@ -342,8 +343,9 @@ void MavStateEstimator::solve() {
   // Solve.
   optimizer_ = boost::make_shared<gtsam::LevenbergMarquardtOptimizer>(
       graph_, initial_values_);
-  future_result_ =
-      std::async(&gtsam::LevenbergMarquardtOptimizer::optimize, optimizer_);
+  ROS_WARN("Start solving thread.");
+  solver_thread_ =
+      std::thread(&gtsam::LevenbergMarquardtOptimizer::optimize, optimizer_);
 
   // Update most recent solution.
 }

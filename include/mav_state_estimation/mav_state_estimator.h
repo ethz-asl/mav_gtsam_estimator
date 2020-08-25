@@ -84,7 +84,6 @@ class MavStateEstimator {
   sensor_msgs::Imu::ConstPtr prev_imu_;
   gtsam::NavState prev_unary_state_;
 
-#include "mav_state_estimation/Timing.h"
   // Extra thread to solve factor graph.
   std::thread solver_thread_;
   std::atomic_bool is_solving_ = false;

@@ -149,12 +149,10 @@ void MavStateEstimator::initializeState() {
     bool initialized_stamps = addUnaryStamp(first_unary_time);
     assert(initialized_stamps);
     initial_values_.print("Initial state: ");
-    ROS_INFO("Initialization stamp: %u.%u", T_IB_0.header.stamp.sec,
-             T_IB_0.header.stamp.nsec);
+    ROS_INFO_STREAM("Initialization stamp: " << T_IB_0.header.stamp);
     next_imu_factor_ = std::next(stamp_to_idx_.begin());
     assert(next_imu_factor_ != stamp_to_idx_.end());
-    ROS_INFO("Next unary stamp: %u.%u", next_imu_factor_->first.sec,
-             next_imu_factor_->first.nsec);
+    ROS_INFO_STREAM("Next unary stamp: " << next_imu_factor_->first);
   }
 }
 
@@ -290,7 +288,8 @@ bool MavStateEstimator::addUnaryStamp(const ros::Time& stamp) {
                              ros::Time(stamp.sec - kIdxWindow, 0));
     auto ns = unary_times_ns_.begin();
     while (!stamp_to_idx_.count(max_time)) {
-      if (!stamp_to_idx_.count(min_time)) {
+      if (!stamp_to_idx_.count(min_time) &&
+          min_time > stamp_to_idx_.rbegin()->first) {
         stamp_to_idx_[min_time] = stamp_to_idx_.rbegin()->second + 1;
       }
       ns = std::next(ns);

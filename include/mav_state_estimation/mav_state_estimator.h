@@ -66,8 +66,6 @@ class MavStateEstimator {
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_T_I_B_;
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_I_v_B_;
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_imu_bias_;
-  boost::shared_ptr<gtsam::PreintegratedCombinedMeasurements::Params>
-      imu_params_;
   gtsam::PreintegratedCombinedMeasurements imu_integration_;
   std::vector<gtsam::NonlinearFactor::shared_ptr> new_factors_;
   std::deque<std::pair<uint32_t, gtsam::NonlinearFactor::shared_ptr>>

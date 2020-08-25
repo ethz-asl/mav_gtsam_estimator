@@ -72,20 +72,21 @@ MavStateEstimator::MavStateEstimator()
   nh_private_.getParam("use_2nd_order_coriolis", use_2nd_order_coriolis);
 
   const gtsam::Matrix I = gtsam::eye(3, 3);
-  imu_params_ = gtsam::PreintegratedCombinedMeasurements::Params::MakeSharedU();
-  imu_params_->biasAccCovariance = I * pow(bias_acc_sigma, 2);
-  imu_params_->biasOmegaCovariance = I * pow(bias_omega_sigma, 2);
+  auto imu_params =
+      gtsam::PreintegratedCombinedMeasurements::Params::MakeSharedU();
+  imu_params->biasAccCovariance = I * pow(bias_acc_sigma, 2);
+  imu_params->biasOmegaCovariance = I * pow(bias_omega_sigma, 2);
   gtsam::Matrix bias_acc_omega_int = gtsam::zeros(6, 6);
   bias_acc_omega_int.block<3, 3>(0, 0) = I * pow(bias_acc_int_sigma, 2);
   bias_acc_omega_int.block<3, 3>(3, 3) = I * pow(bias_omega_int_sigma, 2);
-  imu_params_->biasAccOmegaInt = bias_acc_omega_int;
-  imu_params_->accelerometerCovariance = I * pow(acc_sigma, 2);
-  imu_params_->integrationCovariance = I * pow(integration_sigma, 2);
-  imu_params_->gyroscopeCovariance = I * pow(gyro_sigma, 2);
-  imu_params_->use2ndOrderCoriolis = use_2nd_order_coriolis;
-  imu_params_->print("IMU settings: ");
+  imu_params->biasAccOmegaInt = bias_acc_omega_int;
+  imu_params->accelerometerCovariance = I * pow(acc_sigma, 2);
+  imu_params->integrationCovariance = I * pow(integration_sigma, 2);
+  imu_params->gyroscopeCovariance = I * pow(gyro_sigma, 2);
+  imu_params->use2ndOrderCoriolis = use_2nd_order_coriolis;
+  imu_params->print("IMU settings: ");
   imu_integration_ =
-      gtsam::PreintegratedCombinedMeasurements(imu_params_, getCurrentBias());
+      gtsam::PreintegratedCombinedMeasurements(imu_params, getCurrentBias());
 
   // Subscribe to topics.
   const uint32_t kQueueSize = 1000;

@@ -2,8 +2,11 @@
 
 #include <eigen_conversions/eigen_msg.h>
 #include <geometry_msgs/TransformStamped.h>
+#include <gtsam/base/timing.h>
 #include <gtsam/inference/Symbol.h>
 #include <ros/ros.h>
+
+#include "mav_state_estimation/Timing.h"
 #include "mav_state_estimation/absolute_position_factor.h"
 
 using gtsam::symbol_shorthand::B;  // Bias  (ax,ay,az,gx,gy,gz)
@@ -89,7 +92,7 @@ MavStateEstimator::MavStateEstimator()
       gtsam::PreintegratedCombinedMeasurements(imu_params, getCurrentBias());
 
   // Subscribe to topics.
-  const uint32_t kQueueSize = 10000;
+  const uint32_t kQueueSize = 1000;
   imu_sub_ =
       nh_.subscribe("imu0", kQueueSize, &MavStateEstimator::imuCallback, this);
   ROS_INFO("Subscribing to: %s", imu_sub_.getTopic().c_str());
@@ -99,6 +102,10 @@ MavStateEstimator::MavStateEstimator()
   baseline_sub_ = nh_.subscribe("baseline0", kQueueSize,
                                 &MavStateEstimator::baselineCallback, this);
   ROS_INFO("Subscribing to: %s", baseline_sub_.getTopic().c_str());
+
+  // Advertise topics.
+  timing_pub_ = nh_private_.advertise<mav_state_estimation::Timing>(
+      "solveThreaded", kQueueSize);
 }
 
 Eigen::Vector3d MavStateEstimator::getVectorFromParams(
@@ -358,12 +365,10 @@ MavStateEstimator::~MavStateEstimator() {
 void MavStateEstimator::solve() {
   // Check for new result.
   if (is_solving_.load()) {
-    ROS_INFO("Still solving.");
     return;  // Still solving.
   } else if (!solver_thread_.joinable()) {
     ROS_INFO("Starting thread for the first time.");
   } else {
-    ROS_INFO("Solved.");
     solver_thread_.join();
     // Update initial states with recent optimization.
     initial_values_.update(optimizer_->values());
@@ -372,6 +377,16 @@ void MavStateEstimator::solve() {
     gtsam::NavState nav_prev(initial_values_.at<gtsam::Pose3>(X(idx)),
                              initial_values_.at<gtsam::Velocity3>(V(idx)));
     broadcastTf(nav_prev, idx_to_stamp_[idx], base_frame_ + "_optimized");
+
+    // Publish solving time.
+    tictoc_getNode(solveThreaded, solveThreaded);
+    timing_msg_.header.stamp = idx_to_stamp_[idx];
+    timing_msg_.iteration = solveThreaded->self() - timing_msg_.time;
+    timing_msg_.time = solveThreaded->self();
+    timing_msg_.min = solveThreaded->min();
+    timing_msg_.max = solveThreaded->max();
+    timing_msg_.mean = solveThreaded->mean();
+    timing_pub_.publish(timing_msg_);
 
     // Update future states with new initial state and IMU bias.
     for (auto factor : new_factors_) {
@@ -411,7 +426,6 @@ void MavStateEstimator::solve() {
   new_factors_.clear();
 
   // Solve.
-  ROS_WARN("Start solving thread.");
   optimizer_ = boost::make_shared<gtsam::LevenbergMarquardtOptimizer>(
       graph_, initial_values_);
   is_solving_.store(true);
@@ -419,7 +433,10 @@ void MavStateEstimator::solve() {
 }
 
 void MavStateEstimator::solveThreaded() {
+  gttic_(solveThreaded);
   auto result = optimizer_->optimize();
+  gttoc_(solveThreaded);
+  gtsam::tictoc_finishedIteration_();
   is_solving_.store(false);
 }
 

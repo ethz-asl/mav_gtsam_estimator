@@ -1,8 +1,8 @@
 #ifndef MAV_STATE_ESTIMATOR_MAV_STATE_ESTIMATOR_H_
 #define MAV_STATE_ESTIMATOR_MAV_STATE_ESTIMATOR_H_
 
-#include <thread>
 #include <atomic>
+#include <thread>
 
 #include <gtsam/linear/NoiseModel.h>
 #include <gtsam/navigation/CombinedImuFactor.h>
@@ -16,6 +16,7 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <Eigen/Dense>
 
+#include "mav_state_estimation/Timing.h"
 #include "mav_state_estimation/initialization.h"
 
 namespace mav_state_estimation {
@@ -49,6 +50,9 @@ class MavStateEstimator {
   ros::Subscriber pos_0_sub_;
   ros::Subscriber baseline_sub_;
 
+  ros::Publisher timing_pub_;
+  mav_state_estimation::Timing timing_msg_;
+
   tf2_ros::TransformBroadcaster tfb_;
 
   // Initial parameters.
@@ -74,6 +78,7 @@ class MavStateEstimator {
   sensor_msgs::Imu::ConstPtr prev_imu_;
   gtsam::NavState prev_unary_state_;
 
+#include "mav_state_estimation/Timing.h"
   // Extra thread to solve factor graph.
   std::thread solver_thread_;
   std::atomic_bool is_solving_ = false;

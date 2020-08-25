@@ -18,4 +18,8 @@
   <depend>roscpp</depend>
   <depend>sensor_msgs</depend>
   <depend>tf2_ros</depend>
+  <depend>std_msgs</depend>
+
+  <depend>message_generation</depend>
+  <depend>message_runtime</depend>
 </package>

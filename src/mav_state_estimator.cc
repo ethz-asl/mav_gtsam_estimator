@@ -208,6 +208,13 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     // Setup new inbetween IMU factor.
     if (addUnaryStamp(imu_msg->header.stamp)) {
       uint32_t idx = stamp_to_idx_[imu_msg->header.stamp];
+
+      initial_values_.insert(B(idx), getCurrentBias());
+      initial_values_.insert(X(idx), imu_state.pose());
+      initial_values_.insert(V(idx), imu_state.v());
+      prev_unary_state_ = imu_state;
+      imu_integration_.resetIntegrationAndSetBias(getCurrentBias());
+
       ROS_INFO("Creating new IMU factor at %u.%u between index %u and %u",
                imu_msg->header.stamp.sec, imu_msg->header.stamp.nsec, idx - 1,
                idx);
@@ -216,14 +223,8 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
               X(idx - 1), V(idx - 1), X(idx), V(idx), B(idx - 1), B(idx),
               imu_integration_);
       new_factors_.push_back(imu_factor);
-      imu_integration_.resetIntegrationAndSetBias(getCurrentBias());
       next_imu_factor_ = std::next(next_imu_factor_);
       assert(next_imu_factor_ == stamp_to_idx_.end());
-
-      initial_values_.insert(B(idx), getCurrentBias());
-      initial_values_.insert(X(idx), imu_state.pose());
-      initial_values_.insert(V(idx), imu_state.v());
-      prev_unary_state_ = imu_state;
 
       // Transfer all new unary factors to new factors if IMU inbetween factor
       // exists already.
@@ -396,8 +397,6 @@ void MavStateEstimator::solve() {
   optimizer_ = boost::make_shared<gtsam::LevenbergMarquardtOptimizer>(
       graph_, initial_values_);
   solver_thread_ = std::thread(&MavStateEstimator::solveThreaded, this);
-
-  // Update most recent solution.
 }
 
 void MavStateEstimator::solveThreaded() {

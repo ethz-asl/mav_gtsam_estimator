@@ -357,7 +357,12 @@ MavStateEstimator::~MavStateEstimator() {
 
 void MavStateEstimator::solve() {
   // Check for new result.
-  if (solver_thread_.joinable()) {
+  if (is_solving_.load()) {
+    ROS_INFO("Still solving.");
+    return;  // Still solving.
+  } else if (!solver_thread_.joinable()) {
+    ROS_INFO("Starting thread for the first time.");
+  } else {
     ROS_INFO("Solved.");
     solver_thread_.join();
     // Update initial states with recent optimization.
@@ -392,11 +397,6 @@ void MavStateEstimator::solve() {
         idx++;
       }
     }
-  } else if (solver_thread_.get_id() == std::thread::id()) {
-    ROS_INFO("Starting thread for the first time.");
-  } else {
-    ROS_INFO("Still solving.");
-    return;  // Still solving.
   }
 
   if (new_factors_.empty()) {
@@ -414,11 +414,13 @@ void MavStateEstimator::solve() {
   ROS_WARN("Start solving thread.");
   optimizer_ = boost::make_shared<gtsam::LevenbergMarquardtOptimizer>(
       graph_, initial_values_);
+  is_solving_.store(true);
   solver_thread_ = std::thread(&MavStateEstimator::solveThreaded, this);
 }
 
 void MavStateEstimator::solveThreaded() {
   auto result = optimizer_->optimize();
+  is_solving_.store(false);
 }
 
 }  // namespace mav_state_estimation

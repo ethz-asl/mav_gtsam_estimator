@@ -2,6 +2,7 @@
 #define MAV_STATE_ESTIMATOR_MAV_STATE_ESTIMATOR_H_
 
 #include <thread>
+#include <atomic>
 
 #include <gtsam/linear/NoiseModel.h>
 #include <gtsam/navigation/CombinedImuFactor.h>
@@ -75,6 +76,7 @@ class MavStateEstimator {
 
   // Extra thread to solve factor graph.
   std::thread solver_thread_;
+  std::atomic_bool is_solving_ = false;
   gtsam::NonlinearFactorGraph graph_;
   gtsam::LevenbergMarquardtOptimizer::shared_ptr optimizer_;
   gtsam::Values initial_values_;

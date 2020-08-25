@@ -38,6 +38,9 @@ class MavStateEstimator {
 
   void broadcastTf(const gtsam::NavState& state, const ros::Time& stamp,
                    const std::string& child_frame_id);
+  void publishPose(const gtsam::NavState& state, const ros::Time& stamp,
+                   const ros::Publisher& pub) const;
+
   void addSensorTimes(const uint16_t rate);
   bool addUnaryStamp(const ros::Time& stamp);
   gtsam::imuBias::ConstantBias getCurrentBias() const;
@@ -52,6 +55,9 @@ class MavStateEstimator {
 
   ros::Publisher timing_pub_;
   mav_state_estimation::Timing timing_msg_;
+
+  ros::Publisher prediction_pub_;
+  ros::Publisher optimization_pub_;
 
   tf2_ros::TransformBroadcaster tfb_;
 

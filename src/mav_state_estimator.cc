@@ -1,6 +1,7 @@
 #include "mav_state_estimation/mav_state_estimator.h"
 
 #include <eigen_conversions/eigen_msg.h>
+#include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <gtsam/base/timing.h>
 #include <gtsam/inference/Symbol.h>
@@ -106,6 +107,10 @@ MavStateEstimator::MavStateEstimator()
   // Advertise topics.
   timing_pub_ = nh_private_.advertise<mav_state_estimation::Timing>(
       "solveThreaded", kQueueSize);
+  prediction_pub_ = nh_private_.advertise<geometry_msgs::PoseStamped>(
+      "prediction", kQueueSize);
+  optimization_pub_ = nh_private_.advertise<geometry_msgs::PoseStamped>(
+      "optimization", kQueueSize);
 }
 
 Eigen::Vector3d MavStateEstimator::getVectorFromParams(
@@ -226,6 +231,7 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     gtsam::NavState imu_state =
         imu_integration_.predict(getCurrentState(), getCurrentBias());
     broadcastTf(imu_state, imu_msg->header.stamp, base_frame_ + "_prediction");
+    publishPose(imu_state, imu_msg->header.stamp, prediction_pub_);
 
     // Setup new inbetween IMU factor.
     if (addUnaryStamp(imu_msg->header.stamp)) {
@@ -353,6 +359,19 @@ void MavStateEstimator::broadcastTf(const gtsam::NavState& state,
   tfb_.sendTransform(tf);
 }
 
+void MavStateEstimator::publishPose(const gtsam::NavState& state,
+                                    const ros::Time& stamp,
+                                    const ros::Publisher& pub) const {
+  geometry_msgs::PoseStamped pose;
+  pose.header.stamp = stamp;
+  pose.header.frame_id = inertial_frame_;
+
+  tf::pointEigenToMsg(state.position(), pose.pose.position);
+  tf::quaternionEigenToMsg(state.attitude().toQuaternion(),
+                           pose.pose.orientation);
+  pub.publish(pose);
+}
+
 MavStateEstimator::~MavStateEstimator() {
   if (solver_thread_.joinable()) solver_thread_.join();
 }
@@ -371,7 +390,8 @@ void MavStateEstimator::solve() {
     // Broadcast latest optimized pose.
     gtsam::NavState nav_prev(initial_values_.at<gtsam::Pose3>(X(idx)),
                              initial_values_.at<gtsam::Velocity3>(V(idx)));
-    broadcastTf(nav_prev, idx_to_stamp_[idx], base_frame_ + "_optimized");
+    broadcastTf(nav_prev, idx_to_stamp_[idx], base_frame_ + "_optimization");
+    publishPose(nav_prev, idx_to_stamp_[idx], optimization_pub_);
 
     // Publish solving time.
     tictoc_getNode(solveThreaded, solveThreaded);

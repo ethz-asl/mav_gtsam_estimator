@@ -17,6 +17,10 @@
       <rosparam file="$(find mav_state_estimation)/cfg/estimator.yaml"/>
     </node>
 
+    <node name="euler_optimization_pub" pkg="topic_tools" type="transform" output="screen" args="/$(arg mav_name)/mav_state_estimator/optimization /$(arg mav_name)/mav_state_estimator/optimization_euler geometry_msgs/Vector3Stamped 'geometry_msgs.msg.Vector3Stamped(header=m.header, vector=geometry_msgs.msg.Vector3(*[math.degrees(x) for x in tf.transformations.euler_from_quaternion([m.pose.orientation.x, m.pose.orientation.y, m.pose.orientation.z, m.pose.orientation.w])]))' --import math tf geometry_msgs std_msgs" />
+
+    <node name="euler_prediction_pub" pkg="topic_tools" type="transform" output="screen" args="/$(arg mav_name)/mav_state_estimator/prediction /$(arg mav_name)/mav_state_estimator/prediction_euler geometry_msgs/Vector3Stamped 'geometry_msgs.msg.Vector3Stamped(header=m.header, vector=geometry_msgs.msg.Vector3(*[math.degrees(x) for x in tf.transformations.euler_from_quaternion([m.pose.orientation.x, m.pose.orientation.y, m.pose.orientation.z, m.pose.orientation.w])]))' --import math tf geometry_msgs std_msgs" />
+
     <!-- Rosbag -->
     <group if="$(arg record)">
       <node

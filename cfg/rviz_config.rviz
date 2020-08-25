@@ -12,7 +12,7 @@ Panels:
         - /PoseWithCovariance1
         - /PoseWithCovariance2
       Splitter Ratio: 0.5
-    Tree Height: 852
+    Tree Height: 363
   - Class: rviz/Selection
     Name: Selection
   - Class: rviz/Tool Properties
@@ -195,11 +195,11 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 537.2568969726562
+      Scale: 298.03216552734375
       Target Frame: <Fixed Frame>
       Value: TopDownOrtho (rviz)
-      X: 5.006082057952881
-      Y: 19.972774505615234
+      X: -7.261081695556641
+      Y: 15.942895889282227
     Saved: ~
 Window Geometry:
   Displays:

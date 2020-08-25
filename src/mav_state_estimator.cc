@@ -272,7 +272,7 @@ void MavStateEstimator::posCallback(
     const uint32_t idx = stamp_to_idx_[pos_msg->header.stamp];
     const bool kSmart = false;
     auto cov = gtsam::noiseModel::Gaussian::Covariance(
-        100.0 * Matrix3dRow::Map(pos_msg->position.covariance.data()), kSmart);
+        Matrix3dRow::Map(pos_msg->position.covariance.data()), kSmart);
     AbsolutePositionFactor::shared_ptr pos_factor =
         boost::make_shared<AbsolutePositionFactor>(X(idx), I_t_P, B_t_P_, cov);
     new_unary_factors_.emplace_back(idx, pos_factor);
@@ -391,8 +391,6 @@ void MavStateEstimator::solve() {
         idx++;
       }
     }
-
-    initial_values_.print("After update.");
   } else if (solver_thread_.get_id() == std::thread::id()) {
     ROS_INFO("Starting thread for the first time.");
   } else {

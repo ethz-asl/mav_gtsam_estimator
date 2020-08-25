@@ -3,6 +3,7 @@
 #include <eigen_conversions/eigen_msg.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/TransformStamped.h>
+#include <geometry_msgs/Vector3Stamped.h>
 #include <gtsam/base/timing.h>
 #include <gtsam/inference/Symbol.h>
 #include <ros/ros.h>
@@ -111,6 +112,10 @@ MavStateEstimator::MavStateEstimator()
       "prediction", kQueueSize);
   optimization_pub_ = nh_private_.advertise<geometry_msgs::PoseStamped>(
       "optimization", kQueueSize);
+  acc_bias_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
+      "acc_bias", kQueueSize);
+  gyro_bias_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
+      "gyro_bias", kQueueSize);
 }
 
 Eigen::Vector3d MavStateEstimator::getVectorFromParams(
@@ -372,6 +377,19 @@ void MavStateEstimator::publishPose(const gtsam::NavState& state,
   pub.publish(pose);
 }
 
+void MavStateEstimator::publishBias(const gtsam::imuBias::ConstantBias& bias,
+                                    const ros::Time& stamp) const {
+  geometry_msgs::Vector3Stamped acc_bias, gyro_bias;
+  acc_bias.header.stamp = stamp;
+  gyro_bias.header.stamp = stamp;
+
+  tf::vectorEigenToMsg(bias.accelerometer(), acc_bias.vector);
+  tf::vectorEigenToMsg(bias.gyroscope(), gyro_bias.vector);
+
+  acc_bias_pub_.publish(acc_bias);
+  gyro_bias_pub_.publish(gyro_bias);
+}
+
 MavStateEstimator::~MavStateEstimator() {
   if (solver_thread_.joinable()) solver_thread_.join();
 }
@@ -392,6 +410,8 @@ void MavStateEstimator::solve() {
                              initial_values_.at<gtsam::Velocity3>(V(idx)));
     broadcastTf(nav_prev, idx_to_stamp_[idx], base_frame_ + "_optimization");
     publishPose(nav_prev, idx_to_stamp_[idx], optimization_pub_);
+    publishBias(initial_values_.at<gtsam::imuBias::ConstantBias>(B(idx)),
+                idx_to_stamp_[idx]);
 
     // Publish solving time.
     tictoc_getNode(solveThreaded, solveThreaded);

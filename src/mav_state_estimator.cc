@@ -138,7 +138,6 @@ void MavStateEstimator::initializeState() {
     gtsam::Pose3 T_IB(gtsam::Rot3(q_IB), I_t_B);
     initial_values_.insert(X(0), T_IB);
     initial_values_.insert(V(0), I_v_B);
-    prev_unary_state_ = gtsam::NavState(T_IB, I_v_B);
 
     inertial_frame_ = T_IB_0.header.frame_id;
     base_frame_ = T_IB_0.child_frame_id;
@@ -167,6 +166,21 @@ gtsam::imuBias::ConstantBias MavStateEstimator::getCurrentBias() const {
   } catch (const std::bad_cast& e) {
     ROS_ERROR("Cannot cast bias: %s", e.what());
     return gtsam::imuBias::ConstantBias();
+  }
+}
+
+gtsam::NavState MavStateEstimator::getCurrentState() const {
+  try {
+    auto idx = gtsam::symbolIndex(initial_values_.rbegin()->key);
+    gtsam::NavState nav_state(initial_values_.at<gtsam::Pose3>(X(idx)),
+                              initial_values_.at<gtsam::Velocity3>(V(idx)));
+    return nav_state;
+  } catch (const std::out_of_range& e) {
+    ROS_ERROR("State index out of range: %s", e.what());
+    return gtsam::NavState();
+  } catch (const std::bad_cast& e) {
+    ROS_ERROR("Cannot cast state: %s", e.what());
+    return gtsam::NavState();
   }
 }
 
@@ -200,7 +214,7 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
 
     // Publish high rate IMU prediction.
     gtsam::NavState imu_state =
-        imu_integration_.predict(prev_unary_state_, getCurrentBias());
+        imu_integration_.predict(getCurrentState(), getCurrentBias());
     broadcastTf(imu_state, imu_msg->header.stamp, base_frame_ + "_prediction");
     ROS_DEBUG_STREAM("IMU state: \n" << imu_state);
 
@@ -211,7 +225,6 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
       initial_values_.insert(B(idx), getCurrentBias());
       initial_values_.insert(X(idx), imu_state.pose());
       initial_values_.insert(V(idx), imu_state.v());
-      prev_unary_state_ = imu_state;
       imu_integration_.resetIntegrationAndSetBias(getCurrentBias());
 
       ROS_INFO("Creating new IMU factor at %u.%u between index %u and %u",

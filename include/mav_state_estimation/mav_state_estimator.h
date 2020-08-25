@@ -39,6 +39,7 @@ class MavStateEstimator {
   void addSensorTimes(const uint16_t rate);
   bool addUnaryStamp(const ros::Time& stamp);
   gtsam::imuBias::ConstantBias getCurrentBias() const;
+  gtsam::NavState getCurrentState() const;
 
   ros::NodeHandle nh_;
   ros::NodeHandle nh_private_;

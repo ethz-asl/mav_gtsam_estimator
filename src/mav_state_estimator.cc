@@ -235,9 +235,6 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
       initial_values_.insert(X(idx), imu_state.pose());
       initial_values_.insert(V(idx), imu_state.v());
 
-      ROS_INFO("Creating new IMU factor at %u.%u between index %u and %u",
-               imu_msg->header.stamp.sec, imu_msg->header.stamp.nsec, idx - 1,
-               idx);
       gtsam::CombinedImuFactor::shared_ptr imu_factor =
           boost::make_shared<gtsam::CombinedImuFactor>(
               X(idx - 1), V(idx - 1), X(idx), V(idx), B(idx - 1), B(idx),
@@ -283,8 +280,6 @@ void MavStateEstimator::posCallback(
     AbsolutePositionFactor::shared_ptr pos_factor =
         boost::make_shared<AbsolutePositionFactor>(X(idx), I_t_P, B_t_P_, cov);
     new_unary_factors_.emplace_back(idx, pos_factor);
-    ROS_INFO("Added new position factor at %u.%u and index %u",
-             pos_msg->header.stamp.sec, pos_msg->header.stamp.nsec, idx);
   } else {
     ROS_ERROR("Failed to add unary position factor.");
   }

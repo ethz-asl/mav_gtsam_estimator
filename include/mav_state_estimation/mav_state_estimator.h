@@ -60,6 +60,7 @@ class MavStateEstimator {
   void initializeState();
   std::set<uint32_t> unary_times_ns_;
   std::map<ros::Time, uint32_t> stamp_to_idx_;
+  std::map<uint32_t, ros::Time> idx_to_stamp_;
   std::map<ros::Time, uint32_t>::iterator next_imu_factor_;
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_T_I_B_;
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_I_v_B_;

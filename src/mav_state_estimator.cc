@@ -143,6 +143,7 @@ void MavStateEstimator::initializeState() {
     inertial_frame_ = T_IB_0.header.frame_id;
     base_frame_ = T_IB_0.child_frame_id;
     stamp_to_idx_[T_IB_0.header.stamp] = 0;
+    idx_to_stamp_[stamp_to_idx_[T_IB_0.header.stamp]] = T_IB_0.header.stamp;
     auto first_unary_time = T_IB_0.header.stamp;
     first_unary_time.nsec =
         *unary_times_ns_.upper_bound(T_IB_0.header.stamp.nsec);
@@ -291,6 +292,7 @@ bool MavStateEstimator::addUnaryStamp(const ros::Time& stamp) {
       if (!stamp_to_idx_.count(min_time) &&
           min_time > stamp_to_idx_.rbegin()->first) {
         stamp_to_idx_[min_time] = stamp_to_idx_.rbegin()->second + 1;
+        idx_to_stamp_[stamp_to_idx_[min_time]] = min_time;
       }
       ns = std::next(ns);
       if (ns == unary_times_ns_.end()) {
@@ -343,9 +345,15 @@ void MavStateEstimator::solve() {
   // Check for new result.
   if (solver_thread_.joinable()) {
     solver_thread_.join();
-    // Update initial states.
+    // Update initial states with recent optimization.
     initial_values_.update(optimizer_->values());
     auto idx = gtsam::symbolIndex(optimizer_->values().rbegin()->key);
+    // Broadcast latest optimized pose.
+    gtsam::NavState nav_prev(initial_values_.at<gtsam::Pose3>(X(idx)),
+                             initial_values_.at<gtsam::Velocity3>(V(idx)));
+    broadcastTf(nav_prev, idx_to_stamp_[idx], base_frame_ + "_optimized");
+
+    // Update future states with new initial state and IMU bias.
     for (auto factor : new_factors_) {
       auto imu_factor =
           boost::dynamic_pointer_cast<gtsam::CombinedImuFactor>(factor);

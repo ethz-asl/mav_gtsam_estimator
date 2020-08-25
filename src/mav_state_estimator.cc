@@ -89,7 +89,7 @@ MavStateEstimator::MavStateEstimator()
       gtsam::PreintegratedCombinedMeasurements(imu_params, getCurrentBias());
 
   // Subscribe to topics.
-  const uint32_t kQueueSize = 1000;
+  const uint32_t kQueueSize = 10000;
   imu_sub_ =
       nh_.subscribe("imu0", kQueueSize, &MavStateEstimator::imuCallback, this);
   ROS_INFO("Subscribing to: %s", imu_sub_.getTopic().c_str());
@@ -204,6 +204,8 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     in_between_imu.header.stamp = next_imu_factor_->first;
     ROS_WARN("Inserting missing IMU message at %u.%u",
              in_between_imu.header.stamp.sec, in_between_imu.header.stamp.nsec);
+    ROS_WARN_STREAM("Prev IMU stamp: " << prev_imu_->header.stamp);
+    ROS_WARN_STREAM("This IMU stamp: " << imu_msg->header.stamp);
     imuCallback(boost::make_shared<sensor_msgs::Imu>(in_between_imu));
   } else if (imu_msg->header.stamp > prev_imu_->header.stamp) {
     // Integrate IMU (zero-order-hold).
@@ -217,7 +219,6 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     gtsam::NavState imu_state =
         imu_integration_.predict(getCurrentState(), getCurrentBias());
     broadcastTf(imu_state, imu_msg->header.stamp, base_frame_ + "_prediction");
-    ROS_DEBUG_STREAM("IMU state: \n" << imu_state);
 
     // Setup new inbetween IMU factor.
     if (addUnaryStamp(imu_msg->header.stamp)) {
@@ -243,7 +244,6 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
       // exists already.
       auto it = new_unary_factors_.begin();
       while (it != new_unary_factors_.end() && it->first <= idx) {
-        it->second->print("New factor: \n");
         new_factors_.push_back(it->second);
         it = std::next(it);
         new_unary_factors_.pop_front();
@@ -358,6 +358,7 @@ MavStateEstimator::~MavStateEstimator() {
 void MavStateEstimator::solve() {
   // Check for new result.
   if (solver_thread_.joinable()) {
+    ROS_INFO("Solved.");
     solver_thread_.join();
     // Update initial states with recent optimization.
     initial_values_.update(optimizer_->values());

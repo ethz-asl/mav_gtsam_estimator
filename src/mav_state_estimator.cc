@@ -372,7 +372,6 @@ void MavStateEstimator::solve() {
       auto imu_factor =
           boost::dynamic_pointer_cast<gtsam::CombinedImuFactor>(factor);
       if (imu_factor) {
-        // ROS_INFO("Casting IMU factor succeeded.");
         try {
           gtsam::NavState nav_prev(
               initial_values_.at<gtsam::Pose3>(X(idx)),

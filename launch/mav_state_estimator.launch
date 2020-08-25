@@ -32,7 +32,7 @@
     <!-- Viz -->
     <group if="$(arg visualize)">
       <node name="rviz" pkg="rviz" type="rviz" output="screen" args="-d $(find mav_state_estimation)/cfg/rviz_config.rviz"/>
-      <node name="multiplot" pkg="rqt_multiplot" type="rqt_multiplot" output="screen" args="--multiplot-config $(find mav_state_estimation)/cfg/rqt_multiplot.xml"/>
+      <node name="multiplot" pkg="rqt_multiplot" type="rqt_multiplot" output="screen" args="--multiplot-config $(find mav_state_estimation)/cfg/rqt_multiplot.xml --multiplot-run-all"/>
     </group>
   </group>
 </launch>

@@ -38,6 +38,7 @@ class MavStateEstimator {
                    const std::string& child_frame_id);
   void addSensorTimes(const uint16_t rate);
   bool addUnaryStamp(const ros::Time& stamp);
+  gtsam::imuBias::ConstantBias getCurrentBias() const;
 
   ros::NodeHandle nh_;
   ros::NodeHandle nh_private_;
@@ -70,7 +71,6 @@ class MavStateEstimator {
   std::deque<std::pair<uint32_t, gtsam::NonlinearFactor::shared_ptr>>
       new_unary_factors_;
   sensor_msgs::Imu::ConstPtr prev_imu_;
-  gtsam::imuBias::ConstantBias imu_bias_;
   gtsam::NavState prev_unary_state_;
 
   // Extra thread to solve factor graph.

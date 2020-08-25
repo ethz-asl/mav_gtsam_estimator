@@ -226,7 +226,6 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
       initial_values_.insert(B(idx), getCurrentBias());
       initial_values_.insert(X(idx), imu_state.pose());
       initial_values_.insert(V(idx), imu_state.v());
-      imu_integration_.resetIntegrationAndSetBias(getCurrentBias());
 
       ROS_INFO("Creating new IMU factor at %u.%u between index %u and %u",
                imu_msg->header.stamp.sec, imu_msg->header.stamp.nsec, idx - 1,
@@ -235,6 +234,7 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
           boost::make_shared<gtsam::CombinedImuFactor>(
               X(idx - 1), V(idx - 1), X(idx), V(idx), B(idx - 1), B(idx),
               imu_integration_);
+      imu_integration_.resetIntegrationAndSetBias(getCurrentBias());
       new_factors_.push_back(imu_factor);
       next_imu_factor_ = std::next(next_imu_factor_);
       assert(next_imu_factor_ == stamp_to_idx_.end());
@@ -272,7 +272,7 @@ void MavStateEstimator::posCallback(
     const uint32_t idx = stamp_to_idx_[pos_msg->header.stamp];
     const bool kSmart = false;
     auto cov = gtsam::noiseModel::Gaussian::Covariance(
-        Matrix3dRow::Map(pos_msg->position.covariance.data()), kSmart);
+        100.0 * Matrix3dRow::Map(pos_msg->position.covariance.data()), kSmart);
     AbsolutePositionFactor::shared_ptr pos_factor =
         boost::make_shared<AbsolutePositionFactor>(X(idx), I_t_P, B_t_P_, cov);
     new_unary_factors_.emplace_back(idx, pos_factor);
@@ -372,21 +372,18 @@ void MavStateEstimator::solve() {
       auto imu_factor =
           boost::dynamic_pointer_cast<gtsam::CombinedImuFactor>(factor);
       if (imu_factor) {
-        ROS_INFO("Casting IMU factor succeeded.");
+        // ROS_INFO("Casting IMU factor succeeded.");
         try {
           gtsam::NavState nav_prev(
               initial_values_.at<gtsam::Pose3>(X(idx)),
               initial_values_.at<gtsam::Velocity3>(V(idx)));
           auto bias_prev =
               initial_values_.at<gtsam::imuBias::ConstantBias>(B(idx));
-          auto imu = imu_factor->preintegratedMeasurements();
-          auto nav_next = imu.predict(nav_prev, bias_prev);
-          ROS_INFO("Updating state %lu", idx + 1);
+          auto nav_next = imu_factor->preintegratedMeasurements().predict(
+              nav_prev, bias_prev);
           initial_values_.update(X(idx + 1), nav_next.pose());
           initial_values_.update(V(idx + 1), nav_next.velocity());
           initial_values_.update(B(idx + 1), bias_prev);
-          initial_values_.rbegin()->value.print(
-              "Last value in initial values:\n");
         } catch (const std::out_of_range& e) {
           ROS_ERROR("Index %lu out of range: %s.", idx, e.what());
         } catch (const std::bad_cast& e) {
@@ -395,6 +392,8 @@ void MavStateEstimator::solve() {
         idx++;
       }
     }
+
+    initial_values_.print("After update.");
   } else if (solver_thread_.get_id() == std::thread::id()) {
     ROS_INFO("Starting thread for the first time.");
   } else {
@@ -422,7 +421,6 @@ void MavStateEstimator::solve() {
 
 void MavStateEstimator::solveThreaded() {
   auto result = optimizer_->optimize();
-  result.print("New solution.\n");
 }
 
 }  // namespace mav_state_estimation

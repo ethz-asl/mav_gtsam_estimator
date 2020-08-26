@@ -58,10 +58,9 @@ MavStateEstimator::MavStateEstimator()
   Eigen::Vector3d prior_acc_bias, prior_gyro_bias;
   prior_acc_bias = getVectorFromParams("prior_acc_bias");
   prior_gyro_bias = getVectorFromParams("prior_gyro_bias");
-  initial_values_.insert(
+  insertInitialValue(
       B(0), gtsam::imuBias::ConstantBias(prior_acc_bias, prior_gyro_bias));
-  initial_values_.at<gtsam::imuBias::ConstantBias>(B(0)).print(
-      "prior_imu_bias: ");
+  getInitialValue<gtsam::imuBias::ConstantBias>(B(0)).print("prior_imu_bias: ");
 
   double bias_acc_sigma = 0.0, bias_omega_sigma = 0.0, bias_acc_int_sigma = 0.0,
          bias_omega_int_sigma = 0.0, acc_sigma = 0.0, integration_sigma = 0.0,
@@ -154,8 +153,8 @@ void MavStateEstimator::initializeState() {
     Eigen::Vector3d I_v_B = Eigen::Vector3d::Zero();
 
     gtsam::Pose3 T_IB(gtsam::Rot3(q_IB), I_t_B);
-    initial_values_.insert(X(0), T_IB);
-    initial_values_.insert(V(0), I_v_B);
+    insertInitialValue(X(0), T_IB);
+    insertInitialValue(V(0), I_v_B);
 
     inertial_frame_ = T_IB_0.header.frame_id;
     base_frame_ = T_IB_0.child_frame_id;
@@ -166,7 +165,7 @@ void MavStateEstimator::initializeState() {
         *unary_times_ns_.upper_bound(T_IB_0.header.stamp.nsec);
     bool initialized_stamps = addUnaryStamp(first_unary_time);
     assert(initialized_stamps);
-    initial_values_.print("Initial state: ");
+    printInitialValues("Initial state: ");
     ROS_INFO_STREAM("Initialization stamp: " << T_IB_0.header.stamp);
     next_imu_factor_ = std::next(stamp_to_idx_.begin());
     assert(next_imu_factor_ != stamp_to_idx_.end());
@@ -174,32 +173,14 @@ void MavStateEstimator::initializeState() {
   }
 }
 
-gtsam::imuBias::ConstantBias MavStateEstimator::getCurrentBias() const {
-  try {
-    return initial_values_.at<gtsam::imuBias::ConstantBias>(
-        B(gtsam::symbolIndex(initial_values_.rbegin()->key)));
-  } catch (const std::out_of_range& e) {
-    ROS_ERROR("Bias index out of range: %s", e.what());
-    return gtsam::imuBias::ConstantBias();
-  } catch (const std::bad_cast& e) {
-    ROS_ERROR("Cannot cast bias: %s", e.what());
-    return gtsam::imuBias::ConstantBias();
-  }
+gtsam::imuBias::ConstantBias MavStateEstimator::getCurrentBias() {
+  return getInitialValue<gtsam::imuBias::ConstantBias>(B(getLastIdx()));
 }
 
-gtsam::NavState MavStateEstimator::getCurrentState() const {
-  try {
-    auto idx = gtsam::symbolIndex(initial_values_.rbegin()->key);
-    gtsam::NavState nav_state(initial_values_.at<gtsam::Pose3>(X(idx)),
-                              initial_values_.at<gtsam::Velocity3>(V(idx)));
-    return nav_state;
-  } catch (const std::out_of_range& e) {
-    ROS_ERROR("State index out of range: %s", e.what());
-    return gtsam::NavState();
-  } catch (const std::bad_cast& e) {
-    ROS_ERROR("Cannot cast state: %s", e.what());
-    return gtsam::NavState();
-  }
+gtsam::NavState MavStateEstimator::getCurrentState() {
+  auto idx = getLastIdx();
+  return gtsam::NavState(getInitialValue<gtsam::Pose3>(X(idx)),
+                         getInitialValue<gtsam::Velocity3>(V(idx)));
 }
 
 void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
@@ -242,9 +223,9 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     if (addUnaryStamp(imu_msg->header.stamp)) {
       uint32_t idx = stamp_to_idx_[imu_msg->header.stamp];
 
-      initial_values_.insert(B(idx), getCurrentBias());
-      initial_values_.insert(X(idx), imu_state.pose());
-      initial_values_.insert(V(idx), imu_state.v());
+      insertInitialValue(B(idx), getCurrentBias());
+      insertInitialValue(X(idx), imu_state.pose());
+      insertInitialValue(V(idx), imu_state.v());
 
       gtsam::CombinedImuFactor::shared_ptr imu_factor =
           boost::make_shared<gtsam::CombinedImuFactor>(
@@ -403,14 +384,14 @@ void MavStateEstimator::solve() {
   } else {
     solver_thread_.join();
     // Update initial states with recent optimization.
-    initial_values_.update(optimizer_->values());
+    updateInitialValues(optimizer_->values());
     auto idx = gtsam::symbolIndex(optimizer_->values().rbegin()->key);
     // Broadcast latest optimized pose.
-    gtsam::NavState nav_prev(initial_values_.at<gtsam::Pose3>(X(idx)),
-                             initial_values_.at<gtsam::Velocity3>(V(idx)));
+    gtsam::NavState nav_prev(getInitialValue<gtsam::Pose3>(X(idx)),
+                             getInitialValue<gtsam::Velocity3>(V(idx)));
     broadcastTf(nav_prev, idx_to_stamp_[idx], base_frame_ + "_optimization");
     publishPose(nav_prev, idx_to_stamp_[idx], optimization_pub_);
-    publishBias(initial_values_.at<gtsam::imuBias::ConstantBias>(B(idx)),
+    publishBias(getInitialValue<gtsam::imuBias::ConstantBias>(B(idx)),
                 idx_to_stamp_[idx]);
 
     // Publish solving time.
@@ -429,16 +410,15 @@ void MavStateEstimator::solve() {
           boost::dynamic_pointer_cast<gtsam::CombinedImuFactor>(factor);
       if (imu_factor) {
         try {
-          gtsam::NavState nav_prev(
-              initial_values_.at<gtsam::Pose3>(X(idx)),
-              initial_values_.at<gtsam::Velocity3>(V(idx)));
+          gtsam::NavState nav_prev(getInitialValue<gtsam::Pose3>(X(idx)),
+                                   getInitialValue<gtsam::Velocity3>(V(idx)));
           auto bias_prev =
-              initial_values_.at<gtsam::imuBias::ConstantBias>(B(idx));
+              getInitialValue<gtsam::imuBias::ConstantBias>(B(idx));
           auto nav_next = imu_factor->preintegratedMeasurements().predict(
               nav_prev, bias_prev);
-          initial_values_.update(X(idx + 1), nav_next.pose());
-          initial_values_.update(V(idx + 1), nav_next.velocity());
-          initial_values_.update(B(idx + 1), bias_prev);
+          updateInitialValues(X(idx + 1), nav_next.pose());
+          updateInitialValues(V(idx + 1), nav_next.velocity());
+          updateInitialValues(B(idx + 1), bias_prev);
         } catch (const std::out_of_range& e) {
           ROS_ERROR("Index %lu out of range: %s.", idx, e.what());
         } catch (const std::bad_cast& e) {
@@ -461,8 +441,7 @@ void MavStateEstimator::solve() {
   new_factors_.clear();
 
   // Solve.
-  optimizer_ = boost::make_shared<gtsam::LevenbergMarquardtOptimizer>(
-      graph_, initial_values_);
+  optimizer_ = createOptimizer();
   is_solving_.store(true);
   solver_thread_ = std::thread(&MavStateEstimator::solveThreaded, this);
 }

@@ -2,8 +2,10 @@
 #define MAV_STATE_ESTIMATOR_MAV_STATE_ESTIMATOR_H_
 
 #include <atomic>
+#include <mutex>
 #include <thread>
 
+#include <gtsam/inference/Symbol.h>
 #include <gtsam/linear/NoiseModel.h>
 #include <gtsam/navigation/CombinedImuFactor.h>
 #include <gtsam/navigation/NavState.h>
@@ -45,8 +47,8 @@ class MavStateEstimator {
 
   void addSensorTimes(const uint16_t rate);
   bool addUnaryStamp(const ros::Time& stamp);
-  gtsam::imuBias::ConstantBias getCurrentBias() const;
-  gtsam::NavState getCurrentState() const;
+  gtsam::imuBias::ConstantBias getCurrentBias();
+  gtsam::NavState getCurrentState();
 
   ros::NodeHandle nh_;
   ros::NodeHandle nh_private_;
@@ -93,7 +95,57 @@ class MavStateEstimator {
   std::atomic_bool is_solving_ = false;
   gtsam::NonlinearFactorGraph graph_;
   gtsam::LevenbergMarquardtOptimizer::shared_ptr optimizer_;
+
+  // Mutex lock initial values which are accessed by all threads.
   gtsam::Values initial_values_;
+  std::recursive_mutex mtx_;
+  template <class ValueType>
+  inline ValueType getInitialValue(const gtsam::Key& key) {
+    std::unique_lock<std::recursive_mutex> lock(mtx_);
+    try {
+      return initial_values_.at<ValueType>(key);
+    } catch (const std::out_of_range& e) {
+      ROS_ERROR("Index out of range: %s", e.what());
+      return ValueType();
+    } catch (const std::bad_cast& e) {
+      ROS_ERROR("Cannot cast object: %s", e.what());
+      return ValueType();
+    }
+  }
+
+  template <typename ValueType>
+  inline void insertInitialValue(const gtsam::Key& k, const ValueType& v) {
+    std::unique_lock<std::recursive_mutex> lock(mtx_);
+    initial_values_.insert(k, v);
+  }
+
+  inline void printInitialValues(const std::string& str = "") {
+    std::unique_lock<std::recursive_mutex> lock(mtx_);
+    initial_values_.print(str);
+  }
+
+  inline void updateInitialValues(const gtsam::Values& values) {
+    std::unique_lock<std::recursive_mutex> lock(mtx_);
+    initial_values_.update(values);
+  }
+
+  template <typename ValueType>
+  inline void updateInitialValues(const gtsam::Key& k, const ValueType& v) {
+    std::unique_lock<std::recursive_mutex> lock(mtx_);
+    initial_values_.update(k, v);
+  }
+
+  inline boost::shared_ptr<gtsam::LevenbergMarquardtOptimizer>
+  createOptimizer() {
+    std::unique_lock<std::recursive_mutex> lock(mtx_);
+    return boost::make_shared<gtsam::LevenbergMarquardtOptimizer>(
+        graph_, initial_values_);
+  }
+
+  inline size_t getLastIdx() {
+    std::unique_lock<std::recursive_mutex> lock(mtx_);
+    return gtsam::symbolIndex(initial_values_.rbegin()->key);
+  }
 
   void solve();
 

@@ -156,6 +156,18 @@ void MavStateEstimator::initializeState() {
     initial_values_.insert(X(0), T_IB);
     initial_values_.insert(V(0), I_v_B);
 
+    auto prior_pose = boost::make_shared<gtsam::PriorFactor<gtsam::Pose3>>(
+        X(0), T_IB, prior_noise_model_T_I_B_);
+    auto prior_vel = boost::make_shared<gtsam::PriorFactor<gtsam::Velocity3>>(
+        V(0), I_v_B, prior_noise_model_I_v_B_);
+    auto prior_bias =
+        boost::make_shared<gtsam::PriorFactor<gtsam::imuBias::ConstantBias>>(
+            B(0), getInitialValue<gtsam::imuBias::ConstantBias>(B(0)),
+            prior_noise_model_imu_bias_);
+    new_unary_factors_.emplace_back(0, prior_pose);
+    new_unary_factors_.emplace_back(0, prior_vel);
+    new_unary_factors_.emplace_back(0, prior_bias);
+
     inertial_frame_ = T_IB_0.header.frame_id;
     base_frame_ = T_IB_0.child_frame_id;
     stamp_to_idx_[T_IB_0.header.stamp] = 0;

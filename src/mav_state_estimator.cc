@@ -58,7 +58,7 @@ MavStateEstimator::MavStateEstimator()
   Eigen::Vector3d prior_acc_bias, prior_gyro_bias;
   prior_acc_bias = getVectorFromParams("prior_acc_bias");
   prior_gyro_bias = getVectorFromParams("prior_gyro_bias");
-  insertInitialValue(
+  initial_values_.insert(
       B(0), gtsam::imuBias::ConstantBias(prior_acc_bias, prior_gyro_bias));
   getInitialValue<gtsam::imuBias::ConstantBias>(B(0)).print("prior_imu_bias: ");
 
@@ -153,8 +153,8 @@ void MavStateEstimator::initializeState() {
     Eigen::Vector3d I_v_B = Eigen::Vector3d::Zero();
 
     gtsam::Pose3 T_IB(gtsam::Rot3(q_IB), I_t_B);
-    insertInitialValue(X(0), T_IB);
-    insertInitialValue(V(0), I_v_B);
+    initial_values_.insert(X(0), T_IB);
+    initial_values_.insert(V(0), I_v_B);
 
     inertial_frame_ = T_IB_0.header.frame_id;
     base_frame_ = T_IB_0.child_frame_id;
@@ -165,7 +165,7 @@ void MavStateEstimator::initializeState() {
         *unary_times_ns_.upper_bound(T_IB_0.header.stamp.nsec);
     bool initialized_stamps = addUnaryStamp(first_unary_time);
     assert(initialized_stamps);
-    printInitialValues("Initial state: ");
+    initial_values_.print("Initial state: ");
     ROS_INFO_STREAM("Initialization stamp: " << T_IB_0.header.stamp);
     next_imu_factor_ = std::next(stamp_to_idx_.begin());
     assert(next_imu_factor_ != stamp_to_idx_.end());
@@ -225,9 +225,9 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     if (addUnaryStamp(imu_msg->header.stamp)) {
       uint32_t idx = stamp_to_idx_[imu_msg->header.stamp];
 
-      insertInitialValue(B(idx), getCurrentBias());
-      insertInitialValue(X(idx), imu_state.pose());
-      insertInitialValue(V(idx), imu_state.v());
+      initial_values_.insert(B(idx), getCurrentBias());
+      initial_values_.insert(X(idx), imu_state.pose());
+      initial_values_.insert(V(idx), imu_state.v());
 
       gtsam::CombinedImuFactor::shared_ptr imu_factor =
           boost::make_shared<gtsam::CombinedImuFactor>(
@@ -284,9 +284,9 @@ void MavStateEstimator::posCallback(
 bool MavStateEstimator::addUnaryStamp(const ros::Time& stamp) {
   bool valid = (stamp >= stamp_to_idx_.begin()->first);
   ROS_WARN_COND(!valid,
-                 "The new stamp %u.%u is before initialization time %u.%u.",
-                 stamp.sec, stamp.nsec, stamp_to_idx_.begin()->first.sec,
-                 stamp_to_idx_.begin()->first.nsec);
+                "The new stamp %u.%u is before initialization time %u.%u.",
+                stamp.sec, stamp.nsec, stamp_to_idx_.begin()->first.sec,
+                stamp_to_idx_.begin()->first.nsec);
   bool is_unary = valid & unary_times_ns_.count(stamp.nsec);
   ROS_DEBUG_COND(!is_unary,
                  "The new stamp %u.%u is not expected as a unary factor time.",
@@ -384,7 +384,7 @@ MavStateEstimator::~MavStateEstimator() {
 void MavStateEstimator::updateInitialValues() {
   std::unique_lock<std::recursive_mutex> lock(update_mtx_);
   // Update initial states with recent optimization.
-  updateInitialValues(optimizer_->values());
+  initial_values_.update(optimizer_->values());
   auto idx = gtsam::symbolIndex(optimizer_->values().rbegin()->key);
   // Broadcast latest optimized pose.
   gtsam::NavState nav_prev(getInitialValue<gtsam::Pose3>(X(idx)),
@@ -412,9 +412,9 @@ void MavStateEstimator::updateInitialValues() {
     if (imu_factor) {
       auto nav_next =
           imu_factor->preintegratedMeasurements().predict(nav_prev, bias_prev);
-      updateInitialValues(X(idx + 1), nav_next.pose());
-      updateInitialValues(V(idx + 1), nav_next.velocity());
-      updateInitialValues(B(idx + 1), bias_prev);
+      initial_values_.update(X(idx + 1), nav_next.pose());
+      initial_values_.update(V(idx + 1), nav_next.velocity());
+      initial_values_.update(B(idx + 1), bias_prev);
       idx++;
     }
   }
@@ -442,7 +442,8 @@ void MavStateEstimator::solve() {
   new_factors_.clear();
 
   // Solve.
-  optimizer_ = createOptimizer();
+  optimizer_ = boost::make_shared<gtsam::LevenbergMarquardtOptimizer>(
+      graph_, initial_values_);
   is_solving_.store(true);
   solver_thread_ = std::thread(&MavStateEstimator::solveThreaded, this);
 }

@@ -238,15 +238,6 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
       next_imu_factor_ = std::next(next_imu_factor_);
       assert(next_imu_factor_ == stamp_to_idx_.end());
 
-      // Transfer all new unary factors to new factors if IMU inbetween factor
-      // exists already.
-      auto it = new_unary_factors_.begin();
-      while (it != new_unary_factors_.end() && it->first <= idx) {
-        new_factors_.push_back(it->second);
-        it = std::next(it);
-        new_unary_factors_.pop_front();
-      }
-
       // Attempt to run solver thread.
       solve();
     }
@@ -276,6 +267,7 @@ void MavStateEstimator::posCallback(
     AbsolutePositionFactor::shared_ptr pos_factor =
         boost::make_shared<AbsolutePositionFactor>(X(idx), I_t_P, B_t_P_, cov);
     new_unary_factors_.emplace_back(idx, pos_factor);
+    solve();
   } else {
     ROS_WARN("Failed to add unary position factor.");
   }
@@ -421,6 +413,19 @@ void MavStateEstimator::updateInitialValues() {
 }
 
 void MavStateEstimator::solve() {
+  {
+    std::unique_lock<std::recursive_mutex> lock(update_mtx_);
+    // Transfer all new unary factors to new factors if IMU inbetween factor
+    // exists already.
+    auto it = new_unary_factors_.begin();
+    auto idx = getLastIdx();
+    while (it != new_unary_factors_.end() && it->first <= idx) {
+      new_factors_.push_back(it->second);
+      it = std::next(it);
+      new_unary_factors_.pop_front();
+    }
+  }
+
   // Check for new result.
   if (is_solving_.load()) {
     return;  // Still solving.

@@ -93,10 +93,12 @@ class MavStateEstimator {
   // Extra thread to solve factor graph.
   std::thread solver_thread_;
   std::atomic_bool is_solving_ = false;
+  std::atomic_bool update_required_ = false;
   gtsam::NonlinearFactorGraph graph_;
   gtsam::LevenbergMarquardtOptimizer::shared_ptr optimizer_;
 
   // Mutex lock initial values which are accessed by all threads.
+  void updateInitialValues();
   gtsam::Values initial_values_;
   std::recursive_mutex mtx_;
   template <class ValueType>

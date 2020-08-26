@@ -214,6 +214,7 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     imu_integration_.integrateMeasurement(lin_acc, ang_vel, dt);
 
     // Publish high rate IMU prediction.
+    updateInitialValues();
     gtsam::NavState imu_state =
         imu_integration_.predict(getCurrentState(), getCurrentBias());
     broadcastTf(imu_state, imu_msg->header.stamp, base_frame_ + "_prediction");
@@ -375,14 +376,13 @@ MavStateEstimator::~MavStateEstimator() {
   if (solver_thread_.joinable()) solver_thread_.join();
 }
 
-void MavStateEstimator::solve() {
-  // Check for new result.
-  if (is_solving_.load()) {
-    return;  // Still solving.
-  } else if (!solver_thread_.joinable()) {
-    ROS_INFO("Starting thread for the first time.");
+void MavStateEstimator::updateInitialValues() {
+  if (is_solving_.load() || !solver_thread_.joinable() ||
+      !update_required_.load()) {
+    // No action required. Still solving, not solved before or no update
+    // required.
+    return;
   } else {
-    solver_thread_.join();
     // Update initial states with recent optimization.
     updateInitialValues(optimizer_->values());
     auto idx = gtsam::symbolIndex(optimizer_->values().rbegin()->key);
@@ -391,10 +391,11 @@ void MavStateEstimator::solve() {
                              getInitialValue<gtsam::Velocity3>(V(idx)));
     broadcastTf(nav_prev, idx_to_stamp_[idx], base_frame_ + "_optimization");
     publishPose(nav_prev, idx_to_stamp_[idx], optimization_pub_);
-    publishBias(getInitialValue<gtsam::imuBias::ConstantBias>(B(idx)),
-                idx_to_stamp_[idx]);
+    auto bias_prev = getInitialValue<gtsam::imuBias::ConstantBias>(B(idx));
+    publishBias(bias_prev, idx_to_stamp_[idx]);
 
     // Publish solving time.
+    // TODO(rikba): Move this to solver thread.
     tictoc_getNode(solveThreaded, solveThreaded);
     timing_msg_.header.stamp = idx_to_stamp_[idx];
     timing_msg_.iteration = solveThreaded->self() - timing_msg_.time;
@@ -409,24 +410,29 @@ void MavStateEstimator::solve() {
       auto imu_factor =
           boost::dynamic_pointer_cast<gtsam::CombinedImuFactor>(factor);
       if (imu_factor) {
-        try {
-          gtsam::NavState nav_prev(getInitialValue<gtsam::Pose3>(X(idx)),
-                                   getInitialValue<gtsam::Velocity3>(V(idx)));
-          auto bias_prev =
-              getInitialValue<gtsam::imuBias::ConstantBias>(B(idx));
-          auto nav_next = imu_factor->preintegratedMeasurements().predict(
-              nav_prev, bias_prev);
-          updateInitialValues(X(idx + 1), nav_next.pose());
-          updateInitialValues(V(idx + 1), nav_next.velocity());
-          updateInitialValues(B(idx + 1), bias_prev);
-        } catch (const std::out_of_range& e) {
-          ROS_ERROR("Index %lu out of range: %s.", idx, e.what());
-        } catch (const std::bad_cast& e) {
-          ROS_ERROR("Cannot cast values: %s", e.what());
-        }
+        auto nav_next = imu_factor->preintegratedMeasurements().predict(
+            nav_prev, bias_prev);
+        updateInitialValues(X(idx + 1), nav_next.pose());
+        updateInitialValues(V(idx + 1), nav_next.velocity());
+        updateInitialValues(B(idx + 1), bias_prev);
         idx++;
       }
     }
+    update_required_.store(false);
+  }
+}
+
+void MavStateEstimator::solve() {
+  // Check for new result.
+  if (is_solving_.load()) {
+    return;  // Still solving.
+  } else if (update_required_.load()) {
+    ROS_ERROR("updateInitialValues unexpected.");
+    updateInitialValues();
+  } else if (solver_thread_.joinable()) {
+    solver_thread_.join();
+  } else {
+    ROS_INFO("Starting first solver.");
   }
 
   if (new_factors_.empty()) {
@@ -451,6 +457,7 @@ void MavStateEstimator::solveThreaded() {
   auto result = optimizer_->optimize();
   gttoc_(solveThreaded);
   gtsam::tictoc_finishedIteration_();
+  update_required_.store(true);
   is_solving_.store(false);
 }
 

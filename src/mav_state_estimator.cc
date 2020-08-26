@@ -184,6 +184,8 @@ gtsam::NavState MavStateEstimator::getCurrentState() {
 }
 
 void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
+  // Do not update prediction while initial values are updated.
+  std::unique_lock<std::recursive_mutex> lock(update_mtx_);
   ROS_INFO_ONCE("Received first IMU message.");
   if (!init_.isInitialized()) {
     // Gravitational acceleration in inertial frame (ENU).
@@ -214,7 +216,6 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     imu_integration_.integrateMeasurement(lin_acc, ang_vel, dt);
 
     // Publish high rate IMU prediction.
-    updateInitialValues();
     gtsam::NavState imu_state =
         imu_integration_.predict(getCurrentState(), getCurrentBias());
     broadcastTf(imu_state, imu_msg->header.stamp, base_frame_ + "_prediction");
@@ -257,6 +258,8 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
 
 void MavStateEstimator::posCallback(
     const piksi_rtk_msgs::PositionWithCovarianceStamped::ConstPtr& pos_msg) {
+  // Do not update factors while initial values are updated.
+  std::unique_lock<std::recursive_mutex> lock(update_mtx_);
   ROS_INFO_ONCE("Received first POS message.");
   Eigen::Vector3d I_t_P;
   tf::pointMsgToEigen(pos_msg->position.position, I_t_P);
@@ -274,13 +277,13 @@ void MavStateEstimator::posCallback(
         boost::make_shared<AbsolutePositionFactor>(X(idx), I_t_P, B_t_P_, cov);
     new_unary_factors_.emplace_back(idx, pos_factor);
   } else {
-    ROS_ERROR("Failed to add unary position factor.");
+    ROS_WARN("Failed to add unary position factor.");
   }
 }
 
 bool MavStateEstimator::addUnaryStamp(const ros::Time& stamp) {
   bool valid = (stamp >= stamp_to_idx_.begin()->first);
-  ROS_ERROR_COND(!valid,
+  ROS_WARN_COND(!valid,
                  "The new stamp %u.%u is before initialization time %u.%u.",
                  stamp.sec, stamp.nsec, stamp_to_idx_.begin()->first.sec,
                  stamp_to_idx_.begin()->first.nsec);
@@ -318,6 +321,8 @@ bool MavStateEstimator::addUnaryStamp(const ros::Time& stamp) {
 void MavStateEstimator::baselineCallback(
     const piksi_rtk_msgs::PositionWithCovarianceStamped::ConstPtr&
         baseline_msg) {
+  // Do not update factors while initial values are updated.
+  std::unique_lock<std::recursive_mutex> lock(update_mtx_);
   ROS_INFO_ONCE("Received first BASELINE message.");
   if (!init_.isInitialized()) {
     // TODO(rikba): Use ECEF frame by default.
@@ -377,48 +382,41 @@ MavStateEstimator::~MavStateEstimator() {
 }
 
 void MavStateEstimator::updateInitialValues() {
-  if (is_solving_.load() || !solver_thread_.joinable() ||
-      !update_required_.load()) {
-    // No action required. Still solving, not solved before or no update
-    // required.
-    return;
-  } else {
-    // Update initial states with recent optimization.
-    updateInitialValues(optimizer_->values());
-    auto idx = gtsam::symbolIndex(optimizer_->values().rbegin()->key);
-    // Broadcast latest optimized pose.
-    gtsam::NavState nav_prev(getInitialValue<gtsam::Pose3>(X(idx)),
-                             getInitialValue<gtsam::Velocity3>(V(idx)));
-    broadcastTf(nav_prev, idx_to_stamp_[idx], base_frame_ + "_optimization");
-    publishPose(nav_prev, idx_to_stamp_[idx], optimization_pub_);
-    auto bias_prev = getInitialValue<gtsam::imuBias::ConstantBias>(B(idx));
-    publishBias(bias_prev, idx_to_stamp_[idx]);
+  std::unique_lock<std::recursive_mutex> lock(update_mtx_);
+  // Update initial states with recent optimization.
+  updateInitialValues(optimizer_->values());
+  auto idx = gtsam::symbolIndex(optimizer_->values().rbegin()->key);
+  // Broadcast latest optimized pose.
+  gtsam::NavState nav_prev(getInitialValue<gtsam::Pose3>(X(idx)),
+                           getInitialValue<gtsam::Velocity3>(V(idx)));
+  broadcastTf(nav_prev, idx_to_stamp_[idx], base_frame_ + "_optimization");
+  publishPose(nav_prev, idx_to_stamp_[idx], optimization_pub_);
+  auto bias_prev = getInitialValue<gtsam::imuBias::ConstantBias>(B(idx));
+  publishBias(bias_prev, idx_to_stamp_[idx]);
 
-    // Publish solving time.
-    // TODO(rikba): Move this to solver thread.
-    tictoc_getNode(solveThreaded, solveThreaded);
-    timing_msg_.header.stamp = idx_to_stamp_[idx];
-    timing_msg_.iteration = solveThreaded->self() - timing_msg_.time;
-    timing_msg_.time = solveThreaded->self();
-    timing_msg_.min = solveThreaded->min();
-    timing_msg_.max = solveThreaded->max();
-    timing_msg_.mean = solveThreaded->mean();
-    timing_pub_.publish(timing_msg_);
+  // Publish solving time.
+  // TODO(rikba): Move this to solver thread.
+  tictoc_getNode(solveThreaded, solveThreaded);
+  timing_msg_.header.stamp = idx_to_stamp_[idx];
+  timing_msg_.iteration = solveThreaded->self() - timing_msg_.time;
+  timing_msg_.time = solveThreaded->self();
+  timing_msg_.min = solveThreaded->min();
+  timing_msg_.max = solveThreaded->max();
+  timing_msg_.mean = solveThreaded->mean();
+  timing_pub_.publish(timing_msg_);
 
-    // Update future states with new initial state and IMU bias.
-    for (auto factor : new_factors_) {
-      auto imu_factor =
-          boost::dynamic_pointer_cast<gtsam::CombinedImuFactor>(factor);
-      if (imu_factor) {
-        auto nav_next = imu_factor->preintegratedMeasurements().predict(
-            nav_prev, bias_prev);
-        updateInitialValues(X(idx + 1), nav_next.pose());
-        updateInitialValues(V(idx + 1), nav_next.velocity());
-        updateInitialValues(B(idx + 1), bias_prev);
-        idx++;
-      }
+  // Update future states with new initial state and IMU bias.
+  for (auto factor : new_factors_) {
+    auto imu_factor =
+        boost::dynamic_pointer_cast<gtsam::CombinedImuFactor>(factor);
+    if (imu_factor) {
+      auto nav_next =
+          imu_factor->preintegratedMeasurements().predict(nav_prev, bias_prev);
+      updateInitialValues(X(idx + 1), nav_next.pose());
+      updateInitialValues(V(idx + 1), nav_next.velocity());
+      updateInitialValues(B(idx + 1), bias_prev);
+      idx++;
     }
-    update_required_.store(false);
   }
 }
 
@@ -426,9 +424,6 @@ void MavStateEstimator::solve() {
   // Check for new result.
   if (is_solving_.load()) {
     return;  // Still solving.
-  } else if (update_required_.load()) {
-    ROS_ERROR("updateInitialValues unexpected.");
-    updateInitialValues();
   } else if (solver_thread_.joinable()) {
     solver_thread_.join();
   } else {
@@ -457,7 +452,7 @@ void MavStateEstimator::solveThreaded() {
   auto result = optimizer_->optimize();
   gttoc_(solveThreaded);
   gtsam::tictoc_finishedIteration_();
-  update_required_.store(true);
+  updateInitialValues();
   is_solving_.store(false);
 }
 

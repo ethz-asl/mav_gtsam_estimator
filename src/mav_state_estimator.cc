@@ -214,7 +214,7 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     // Handle dropped IMU message.
     // TODO(rikba): Linearly inpterpolate IMU message.
     auto in_between_imu = boost::make_shared<sensor_msgs::Imu>(*prev_imu_);
-    in_between_imu->header.stamp = idx_to_stamp_[idx_];
+    in_between_imu->header.stamp = idx_to_stamp_[idx_ + 1];
     ROS_WARN_STREAM("Inserting missing IMU message at "
                     << in_between_imu->header.stamp);
     ROS_WARN_STREAM("Prev IMU stamp: " << prev_imu_->header.stamp);

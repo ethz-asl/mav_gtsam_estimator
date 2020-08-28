@@ -210,7 +210,7 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     init_.addOrientationConstraint1(I_g, B_g, imu_msg->header.stamp);
     init_.setBaseFrame(imu_msg->header.frame_id);
     initializeState();
-  } else if (imu_msg->header.stamp > idx_to_stamp_[idx_]) {
+  } else if (imu_msg->header.stamp > idx_to_stamp_[idx_ + 1]) {
     // Handle dropped IMU message.
     // TODO(rikba): Linearly inpterpolate IMU message.
     auto in_between_imu = boost::make_shared<sensor_msgs::Imu>(*prev_imu_);

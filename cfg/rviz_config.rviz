@@ -6,6 +6,7 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
+        - /TF1
         - /TF1/Frames1
         - /Marker1
         - /Marker2
@@ -59,10 +60,10 @@ Visualization Manager:
       Value: true
     - Class: rviz/TF
       Enabled: true
-      Frame Timeout: 15
+      Frame Timeout: 100
       Frames:
         All Enabled: false
-        adis16448bmlz_optimized:
+        adis16448bmlz_optimization:
           Value: true
         adis16448bmlz_prediction:
           Value: true
@@ -75,7 +76,7 @@ Visualization Manager:
       Show Names: true
       Tree:
         enu:
-          adis16448bmlz_optimized:
+          adis16448bmlz_optimization:
             {}
           adis16448bmlz_prediction:
             {}
@@ -185,21 +186,26 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: 0
-      Class: rviz/TopDownOrtho
+      Class: rviz/Orbit
+      Distance: 23.17490005493164
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
+      Focal Point:
+        X: -9.198782920837402
+        Y: 12.171993255615234
+        Z: -0.87667316198349
+      Focal Shape Fixed Size: false
+      Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 10
+      Pitch: 0.5453984141349792
       Target Frame: enu
-      Value: TopDownOrtho (rviz)
-      X: 0
-      Y: 0
+      Value: Orbit (rviz)
+      Yaw: 0.8753980994224548
     Saved: ~
 Window Geometry:
   Displays:

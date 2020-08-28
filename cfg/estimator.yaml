@@ -24,3 +24,7 @@ attitude_receiver:
   # (Initial) extrinsic calibration IMU frame
   B_t: [0.139, -0.195, 0.340]
   rate: 5
+
+isam2:
+  relinearizeThreshold: 0.01
+  relinearizeSkip: 1

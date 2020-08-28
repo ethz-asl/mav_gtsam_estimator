@@ -58,9 +58,8 @@ MavStateEstimator::MavStateEstimator()
   Eigen::Vector3d prior_acc_bias, prior_gyro_bias;
   prior_acc_bias = getVectorFromParams("prior_acc_bias");
   prior_gyro_bias = getVectorFromParams("prior_gyro_bias");
-  initial_values_.insert(
-      B(0), gtsam::imuBias::ConstantBias(prior_acc_bias, prior_gyro_bias));
-  getInitialValue<gtsam::imuBias::ConstantBias>(B(0)).print("prior_imu_bias: ");
+  prev_bias_ = gtsam::imuBias::ConstantBias(prior_acc_bias, prior_gyro_bias);
+  prev_bias_.print("prior_imu_bias: ");
 
   double bias_acc_sigma = 0.0, bias_omega_sigma = 0.0, bias_acc_int_sigma = 0.0,
          bias_omega_int_sigma = 0.0, acc_sigma = 0.0, integration_sigma = 0.0,
@@ -89,8 +88,15 @@ MavStateEstimator::MavStateEstimator()
   imu_params->gyroscopeCovariance = I * pow(gyro_sigma, 2);
   imu_params->use2ndOrderCoriolis = use_2nd_order_coriolis;
   imu_params->print("IMU settings: ");
-  imu_integration_ =
-      gtsam::PreintegratedCombinedMeasurements(imu_params, getCurrentBias());
+  integrator_ =
+      gtsam::PreintegratedCombinedMeasurements(imu_params, prev_bias_);
+
+  gtsam::ISAM2Params parameters;
+  // TODO(rikba): Set more ISAM2 params here.
+  // nh_private_.getParam("isam2/relinearizeThreshold",
+  //                     parameters.relinearizeThreshold);
+  nh_private_.getParam("isam2/relinearizeSkip", parameters.relinearizeSkip);
+  isam2_ = gtsam::ISAM2(parameters);
 
   // Subscribe to topics.
   const uint32_t kQueueSize = 1000;
@@ -146,15 +152,20 @@ void MavStateEstimator::addSensorTimes(const uint16_t rate) {
 void MavStateEstimator::initializeState() {
   geometry_msgs::TransformStamped T_IB_0;
   if (init_.getInitialPose(&T_IB_0)) {
+    // Get initial values.
     Eigen::Vector3d I_t_B;
     Eigen::Quaterniond q_IB;
     tf::vectorMsgToEigen(T_IB_0.transform.translation, I_t_B);
     tf::quaternionMsgToEigen(T_IB_0.transform.rotation, q_IB);
     Eigen::Vector3d I_v_B = Eigen::Vector3d::Zero();
-
     gtsam::Pose3 T_IB(gtsam::Rot3(q_IB), I_t_B);
-    initial_values_.insert(X(0), T_IB);
-    initial_values_.insert(V(0), I_v_B);
+
+    // Fill initial ISAM state.
+    new_values_.insert(X(0), T_IB);
+    new_values_.insert(V(0), I_v_B);
+    new_values_.insert(B(0), prev_bias_);
+
+    prev_state_ = gtsam::NavState(T_IB, I_v_B);
 
     auto prior_pose = boost::make_shared<gtsam::PriorFactor<gtsam::Pose3>>(
         X(0), T_IB, prior_noise_model_T_I_B_);
@@ -162,37 +173,27 @@ void MavStateEstimator::initializeState() {
         V(0), I_v_B, prior_noise_model_I_v_B_);
     auto prior_bias =
         boost::make_shared<gtsam::PriorFactor<gtsam::imuBias::ConstantBias>>(
-            B(0), getInitialValue<gtsam::imuBias::ConstantBias>(B(0)),
-            prior_noise_model_imu_bias_);
+            B(0), prev_bias_, prior_noise_model_imu_bias_);
     new_unary_factors_.emplace_back(0, prior_pose);
     new_unary_factors_.emplace_back(0, prior_vel);
     new_unary_factors_.emplace_back(0, prior_bias);
 
     inertial_frame_ = T_IB_0.header.frame_id;
     base_frame_ = T_IB_0.child_frame_id;
+
+    // Initialize time stamps.
     stamp_to_idx_[T_IB_0.header.stamp] = 0;
     idx_to_stamp_[stamp_to_idx_[T_IB_0.header.stamp]] = T_IB_0.header.stamp;
-    auto first_unary_time = T_IB_0.header.stamp;
-    first_unary_time.nsec =
+    auto next_state_time = T_IB_0.header.stamp;
+    next_state_time.nsec =
         *unary_times_ns_.upper_bound(T_IB_0.header.stamp.nsec);
-    bool initialized_stamps = addUnaryStamp(first_unary_time);
-    assert(initialized_stamps);
-    initial_values_.print("Initial state: ");
-    ROS_INFO_STREAM("Initialization stamp: " << T_IB_0.header.stamp);
-    next_imu_factor_ = std::next(stamp_to_idx_.begin());
-    assert(next_imu_factor_ != stamp_to_idx_.end());
-    ROS_INFO_STREAM("Next unary stamp: " << next_imu_factor_->first);
+    addUnaryStamp(next_state_time);
+
+    // Print
+    new_values_.print("Initial state: ");
+    ROS_INFO_STREAM("Initialization stamp: " << idx_to_stamp_[idx_]);
+    ROS_INFO_STREAM("Next unary stamp: " << idx_to_stamp_[1]);
   }
-}
-
-gtsam::imuBias::ConstantBias MavStateEstimator::getCurrentBias() {
-  return getInitialValue<gtsam::imuBias::ConstantBias>(B(getLastIdx()));
-}
-
-gtsam::NavState MavStateEstimator::getCurrentState() {
-  auto idx = getLastIdx();
-  return gtsam::NavState(getInitialValue<gtsam::Pose3>(X(idx)),
-                         getInitialValue<gtsam::Velocity3>(V(idx)));
 }
 
 void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
@@ -209,46 +210,43 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     init_.addOrientationConstraint1(I_g, B_g, imu_msg->header.stamp);
     init_.setBaseFrame(imu_msg->header.frame_id);
     initializeState();
-  } else if (imu_msg->header.stamp > next_imu_factor_->first) {
+  } else if (imu_msg->header.stamp > idx_to_stamp_[idx_]) {
     // Handle dropped IMU message.
     // TODO(rikba): Linearly inpterpolate IMU message.
-    sensor_msgs::Imu in_between_imu = *prev_imu_;
-    in_between_imu.header.stamp = next_imu_factor_->first;
-    ROS_WARN("Inserting missing IMU message at %u.%u",
-             in_between_imu.header.stamp.sec, in_between_imu.header.stamp.nsec);
+    auto in_between_imu = boost::make_shared<sensor_msgs::Imu>(*prev_imu_);
+    in_between_imu->header.stamp = idx_to_stamp_[idx_];
+    ROS_WARN_STREAM("Inserting missing IMU message at "
+                    << in_between_imu->header.stamp);
     ROS_WARN_STREAM("Prev IMU stamp: " << prev_imu_->header.stamp);
     ROS_WARN_STREAM("This IMU stamp: " << imu_msg->header.stamp);
-    imuCallback(boost::make_shared<sensor_msgs::Imu>(in_between_imu));
+    imuCallback(in_between_imu);
   } else if (imu_msg->header.stamp > prev_imu_->header.stamp) {
     // Integrate IMU (zero-order-hold).
     Eigen::Vector3d lin_acc, ang_vel;
     tf::vectorMsgToEigen(prev_imu_->linear_acceleration, lin_acc);
     tf::vectorMsgToEigen(prev_imu_->angular_velocity, ang_vel);
     double dt = (imu_msg->header.stamp - prev_imu_->header.stamp).toSec();
-    imu_integration_.integrateMeasurement(lin_acc, ang_vel, dt);
+    integrator_.integrateMeasurement(lin_acc, ang_vel, dt);
 
     // Publish high rate IMU prediction.
-    gtsam::NavState imu_state =
-        imu_integration_.predict(getCurrentState(), getCurrentBias());
-    broadcastTf(imu_state, imu_msg->header.stamp, base_frame_ + "_prediction");
-    publishPose(imu_state, imu_msg->header.stamp, prediction_pub_);
+    prev_state_ = integrator_.predict(prev_state_, prev_bias_);
+    broadcastTf(prev_state_, imu_msg->header.stamp,
+                base_frame_ + "_prediction");
+    publishPose(prev_state_, imu_msg->header.stamp, prediction_pub_);
 
     // Setup new inbetween IMU factor.
     if (addUnaryStamp(imu_msg->header.stamp)) {
-      uint32_t idx = stamp_to_idx_[imu_msg->header.stamp];
+      idx_ = stamp_to_idx_[imu_msg->header.stamp];
 
-      initial_values_.insert(B(idx), getCurrentBias());
-      initial_values_.insert(X(idx), imu_state.pose());
-      initial_values_.insert(V(idx), imu_state.v());
+      new_values_.insert(B(idx_), prev_bias_);
+      new_values_.insert(X(idx_), prev_state_.pose());
+      new_values_.insert(V(idx_), prev_state_.v());
 
-      gtsam::CombinedImuFactor::shared_ptr imu_factor =
-          boost::make_shared<gtsam::CombinedImuFactor>(
-              X(idx - 1), V(idx - 1), X(idx), V(idx), B(idx - 1), B(idx),
-              imu_integration_);
-      imu_integration_.resetIntegrationAndSetBias(getCurrentBias());
-      new_factors_.push_back(imu_factor);
-      next_imu_factor_ = std::next(next_imu_factor_);
-      assert(next_imu_factor_ == stamp_to_idx_.end());
+      auto imu_factor = boost::make_shared<gtsam::CombinedImuFactor>(
+          X(idx_ - 1), V(idx_ - 1), X(idx_), V(idx_), B(idx_ - 1), B(idx_),
+          integrator_);
+      integrator_.resetIntegrationAndSetBias(prev_bias_);
+      new_graph_.add(imu_factor);
 
       // Attempt to run solver thread.
       solve();
@@ -270,15 +268,15 @@ void MavStateEstimator::posCallback(
     // GNSS antenna position in inertial frame (ENU).
     init_.addPositionConstraint(I_t_P, B_t_P_, pos_msg->header.stamp);
     init_.setInertialFrame(pos_msg->header.frame_id);
-    initializeState();
   } else if (addUnaryStamp(pos_msg->header.stamp)) {
-    const uint32_t idx = stamp_to_idx_[pos_msg->header.stamp];
     const bool kSmart = false;
     auto cov = gtsam::noiseModel::Gaussian::Covariance(
         Matrix3dRow::Map(pos_msg->position.covariance.data()), kSmart);
     AbsolutePositionFactor::shared_ptr pos_factor =
-        boost::make_shared<AbsolutePositionFactor>(X(idx), I_t_P, B_t_P_, cov);
-    new_unary_factors_.emplace_back(idx, pos_factor);
+        boost::make_shared<AbsolutePositionFactor>(
+            X(stamp_to_idx_[pos_msg->header.stamp]), I_t_P, B_t_P_, cov);
+    new_unary_factors_.emplace_back(stamp_to_idx_[pos_msg->header.stamp],
+                                    pos_factor);
     solve();
   } else {
     ROS_WARN("Failed to add unary position factor.");
@@ -337,7 +335,6 @@ void MavStateEstimator::baselineCallback(
     // Moving baseline heading in base frame (IMU).
     Eigen::Vector3d B_h = B_t_A_ - B_t_P_;
     init_.addOrientationConstraint2(I_h, B_h, baseline_msg->header.stamp);
-    initializeState();
   }
 }
 
@@ -385,58 +382,20 @@ MavStateEstimator::~MavStateEstimator() {
   if (solver_thread_.joinable()) solver_thread_.join();
 }
 
-void MavStateEstimator::updateInitialValues() {
-  std::unique_lock<std::recursive_mutex> lock(update_mtx_);
-  // Update initial states with recent optimization.
-  initial_values_.update(optimizer_->values());
-  auto idx = gtsam::symbolIndex(optimizer_->values().rbegin()->key);
-  // Broadcast latest optimized pose.
-  gtsam::NavState nav_prev(getInitialValue<gtsam::Pose3>(X(idx)),
-                           getInitialValue<gtsam::Velocity3>(V(idx)));
-  broadcastTf(nav_prev, idx_to_stamp_[idx], base_frame_ + "_optimization");
-  publishPose(nav_prev, idx_to_stamp_[idx], optimization_pub_);
-  auto bias_prev = getInitialValue<gtsam::imuBias::ConstantBias>(B(idx));
-  publishBias(bias_prev, idx_to_stamp_[idx]);
-
-  // Publish solving time.
-  // TODO(rikba): Move this to solver thread.
-  tictoc_getNode(solveThreaded, solveThreaded);
-  timing_msg_.header.stamp = idx_to_stamp_[idx];
-  timing_msg_.iteration = solveThreaded->self() - timing_msg_.time;
-  timing_msg_.time = solveThreaded->self();
-  timing_msg_.min = solveThreaded->min();
-  timing_msg_.max = solveThreaded->max();
-  timing_msg_.mean = solveThreaded->mean();
-  timing_pub_.publish(timing_msg_);
-
-  // Update future states with new initial state and IMU bias.
-  for (auto factor : new_factors_) {
-    auto imu_factor =
-        boost::dynamic_pointer_cast<gtsam::CombinedImuFactor>(factor);
-    if (imu_factor) {
-      auto nav_next =
-          imu_factor->preintegratedMeasurements().predict(nav_prev, bias_prev);
-      initial_values_.update(X(idx + 1), nav_next.pose());
-      initial_values_.update(V(idx + 1), nav_next.velocity());
-      initial_values_.update(B(idx + 1), bias_prev);
-      idx++;
-    }
-  }
-}
-
 void MavStateEstimator::solve() {
-  {
-    std::unique_lock<std::recursive_mutex> lock(update_mtx_);
-    // Transfer all new unary factors to new factors if IMU inbetween factor
-    // exists already.
-    auto it = new_unary_factors_.begin();
-    auto idx = getLastIdx();
-    while (it != new_unary_factors_.end() && it->first <= idx) {
-      new_factors_.push_back(it->second);
-      it = std::next(it);
-      new_unary_factors_.pop_front();
-    }
-  }
+  // Transfer new unary factors to graph if IMU inbetween exists.
+  new_unary_factors_.erase(
+      std::remove_if(
+          new_unary_factors_.begin(), new_unary_factors_.end(),
+          [this](const std::pair<uint64_t, gtsam::NonlinearFactor::shared_ptr>&
+                     factor) -> bool {
+            bool remove = (factor.first <= this->idx_);
+            if (remove) {
+              this->new_graph_.add(factor.second);
+            }
+            return remove;
+          }),
+      new_unary_factors_.end());
 
   // Check for new result.
   if (is_solving_.load()) {
@@ -447,30 +406,75 @@ void MavStateEstimator::solve() {
     ROS_INFO("Starting first solver.");
   }
 
-  if (new_factors_.empty()) {
+  if (new_graph_.empty()) {
     ROS_WARN("No new factors.");
     return;
   }
 
-  // Add new factors to graph.
-  for (auto factor : new_factors_) {
-    graph_.add(factor);
-  }
-  new_factors_.clear();
+  // Copy new factors to graph.
+  auto graph = std::make_unique<gtsam::NonlinearFactorGraph>(new_graph_);
+  auto values = std::make_unique<gtsam::Values>(new_values_);
+  auto time = std::make_unique<ros::Time>(idx_to_stamp_[idx_]);
+  new_graph_.resize(0);
+  new_values_.clear();
 
   // Solve.
-  optimizer_ = boost::make_shared<gtsam::LevenbergMarquardtOptimizer>(
-      graph_, initial_values_);
   is_solving_.store(true);
-  solver_thread_ = std::thread(&MavStateEstimator::solveThreaded, this);
+  solver_thread_ =
+      std::thread(&MavStateEstimator::solveThreaded, this, std::move(graph),
+                  std::move(values), std::move(time), idx_);
 }
 
-void MavStateEstimator::solveThreaded() {
+void MavStateEstimator::solveThreaded(
+    std::unique_ptr<gtsam::NonlinearFactorGraph> graph,
+    std::unique_ptr<gtsam::Values> values, std::unique_ptr<ros::Time> time,
+    uint64_t i) {
+  assert(graph);
+  assert(values);
+  assert(time);
+
+  // Solve iterative problem.
   gttic_(solveThreaded);
-  auto result = optimizer_->optimize();
+  isam2_.update(*graph, *values);
+  auto pose = isam2_.calculateEstimate<gtsam::Pose3>(X(i));
+  auto velocity = isam2_.calculateEstimate<gtsam::Velocity3>(V(i));
+  auto bias = isam2_.calculateEstimate<gtsam::imuBias::ConstantBias>(B(i));
   gttoc_(solveThreaded);
   gtsam::tictoc_finishedIteration_();
-  updateInitialValues();
+
+  // ROS publishers
+  tictoc_getNode(solveThreaded, solveThreaded);
+  timing_msg_.header.stamp = *time;
+  timing_msg_.iteration = solveThreaded->self() - timing_msg_.time;
+  timing_msg_.time = solveThreaded->self();
+  timing_msg_.min = solveThreaded->min();
+  timing_msg_.max = solveThreaded->max();
+  timing_msg_.mean = solveThreaded->mean();
+  timing_pub_.publish(timing_msg_);
+
+  gtsam::NavState new_state(pose, velocity);
+  broadcastTf(new_state, *time, base_frame_ + "_optimization");
+  publishPose(new_state, *time, optimization_pub_);
+  publishBias(bias, *time);
+
+  // Update new values (threadsafe, blocks all sensor callbacks).
+  std::unique_lock<std::recursive_mutex> lock(update_mtx_);
+  prev_state_ = new_state;
+  prev_bias_ = bias;
+
+  for (auto it = new_graph_.begin(); it != new_graph_.end(); ++it) {
+    auto imu = boost::dynamic_pointer_cast<gtsam::CombinedImuFactor>(*it);
+    if (imu) {
+      prev_state_ =
+          imu->preintegratedMeasurements().predict(prev_state_, prev_bias_);
+      new_values_.update(X(i + 1), prev_state_.pose());
+      new_values_.update(V(i + 1), prev_state_.velocity());
+      new_values_.update(B(i + 1), prev_bias_);
+      i++;
+    }
+  }
+  assert(idx_ == i);
+
   is_solving_.store(false);
 }
 

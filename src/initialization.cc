@@ -9,31 +9,25 @@ namespace mav_state_estimation {
 void Initialization::addOrientationConstraint1(const Eigen::Vector3d& r_I,
                                                const Eigen::Vector3d& r_B,
                                                const ros::Time& t) {
-  if (!isInitialized()) {
-    r_1 = std::make_optional<VectorPair>(r_I, r_B);
-    stamp_ = t;
-    computeInitialState();
-  }
+  r_1 = std::make_optional<VectorPair>(r_I, r_B);
+  stamp_ = t;
+  computeInitialState();
 }
 
 void Initialization::addOrientationConstraint2(const Eigen::Vector3d& r_I,
                                                const Eigen::Vector3d& r_B,
                                                const ros::Time& t) {
-  if (!isInitialized()) {
-    r_2 = std::make_optional<VectorPair>(r_I, r_B);
-    stamp_ = t;
-    computeInitialState();
-  }
+  r_2 = std::make_optional<VectorPair>(r_I, r_B);
+  stamp_ = t;
+  computeInitialState();
 }
 
 void Initialization::addPositionConstraint(const Eigen::Vector3d& I_t_P,
                                            const Eigen::Vector3d& B_t_P,
                                            const ros::Time& t) {
-  if (!isInitialized()) {
-    p = std::make_optional<VectorPair>(I_t_P, B_t_P);
-    stamp_ = t;
-    computeInitialState();
-  }
+  p = std::make_optional<VectorPair>(I_t_P, B_t_P);
+  stamp_ = t;
+  computeInitialState();
 }
 
 bool Initialization::getInitialPose(

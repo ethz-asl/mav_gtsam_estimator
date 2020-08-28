@@ -10,7 +10,7 @@ bias_acc_sigma: 0.00008
 bias_omega_sigma: 0.00005
 bias_acc_int_sigma: 1.0e-5
 bias_omega_int_sigma: 1.0e-5
-acc_sigma: 0.1
+acc_sigma: 0.3
 gyro_sigma: 0.0002
 integration_sigma: 1.0e-7
 use_2nd_order_coriolis: false
@@ -18,6 +18,7 @@ use_2nd_order_coriolis: false
 position_receiver:
   # (Initial) extrinsic calibration
   B_t: [0.139, 0.205, 0.340]
+  scale_cov: 100.0
   rate: 10
 
 attitude_receiver:

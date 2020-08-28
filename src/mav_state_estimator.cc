@@ -28,6 +28,8 @@ MavStateEstimator::MavStateEstimator()
   int rate = 0;
   nh_private_.getParam("position_receiver/rate", rate);
   addSensorTimes(rate);
+  nh_private_.getParam("position_receiver/rate", pos_receiver_cov_scale_);
+  ROS_INFO_STREAM("Position receiver cov scale: " << pos_receiver_cov_scale_);
 
   B_t_A_ = getVectorFromParams("attitude_receiver/B_t");
   ROS_INFO_STREAM("Initial guess B_t_A: " << B_t_A_.transpose());
@@ -293,7 +295,9 @@ void MavStateEstimator::posCallback(
   } else if (addUnaryStamp(pos_msg->header.stamp)) {
     const bool kSmart = false;
     auto cov = gtsam::noiseModel::Gaussian::Covariance(
-        Matrix3dRow::Map(pos_msg->position.covariance.data()), kSmart);
+        pos_receiver_cov_scale_ *
+            Matrix3dRow::Map(pos_msg->position.covariance.data()),
+        kSmart);
     AbsolutePositionFactor::shared_ptr pos_factor =
         boost::make_shared<AbsolutePositionFactor>(
             X(stamp_to_idx_[pos_msg->header.stamp]), I_t_P, B_t_P_, cov);
@@ -420,18 +424,10 @@ void MavStateEstimator::solve() {
       new_unary_factors_.end());
 
   // Check for new result.
-  if (is_solving_.load()) {
-    return;  // Still solving.
-  } else if (solver_thread_.joinable()) {
-    solver_thread_.join();
-  } else {
-    ROS_INFO("Starting first solver.");
-  }
-
-  if (new_graph_.empty()) {
-    ROS_WARN("No new factors.");
+  if (is_solving_.load() || new_graph_.empty()) {
     return;
   }
+  if (solver_thread_.joinable()) solver_thread_.join();
 
   // Copy new factors to graph.
   auto graph = std::make_unique<gtsam::NonlinearFactorGraph>(new_graph_);

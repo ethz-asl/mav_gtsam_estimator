@@ -78,6 +78,8 @@ class MavStateEstimator {
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_I_v_B_;
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_imu_bias_;
 
+  double pos_receiver_cov_scale_ = 1.0;
+
   void initializeState();
   inline bool isInitialized() const { return !stamp_to_idx_.empty(); }
   std::set<uint32_t> unary_times_ns_;

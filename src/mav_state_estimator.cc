@@ -229,14 +229,14 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     integrator_.integrateMeasurement(lin_acc, ang_vel, dt);
 
     // Publish high rate IMU prediction.
-    prev_state_ = integrator_.predict(prev_state_, prev_bias_);
-    broadcastTf(prev_state_, imu_msg->header.stamp,
-                base_frame_ + "_prediction");
-    publishPose(prev_state_, imu_msg->header.stamp, prediction_pub_);
+    auto imu_state = integrator_.predict(prev_state_, prev_bias_);
+    broadcastTf(imu_state, imu_msg->header.stamp, base_frame_ + "_prediction");
+    publishPose(imu_state, imu_msg->header.stamp, prediction_pub_);
 
     // Setup new inbetween IMU factor.
     if (addUnaryStamp(imu_msg->header.stamp)) {
       idx_ = stamp_to_idx_[imu_msg->header.stamp];
+      prev_state_ = imu_state;
 
       new_values_.insert(B(idx_), prev_bias_);
       new_values_.insert(X(idx_), prev_state_.pose());

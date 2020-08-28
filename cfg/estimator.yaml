@@ -26,5 +26,9 @@ attitude_receiver:
   rate: 5
 
 isam2:
-  relinearizeThreshold: 0.01
-  relinearizeSkip: 1
+  relinearize_threshold_rot: 0.02 # rad
+  relinearize_threshold_pos: 0.01 # m
+  relinearize_threshold_vel: 0.01  # m/s
+  relinearize_threshold_acc_bias: 0.01 # m/s**2
+  relinearize_threshold_gyro_bias: 0.02 # rad/s
+  relinearize_skip: 1

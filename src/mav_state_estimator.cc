@@ -93,9 +93,31 @@ MavStateEstimator::MavStateEstimator()
 
   gtsam::ISAM2Params parameters;
   // TODO(rikba): Set more ISAM2 params here.
-  // nh_private_.getParam("isam2/relinearizeThreshold",
-  //                     parameters.relinearizeThreshold);
-  nh_private_.getParam("isam2/relinearizeSkip", parameters.relinearizeSkip);
+  double relinearize_threshold_rot, relinearize_threshold_pos,
+      relinearize_threshold_vel, relinearize_threshold_acc_bias,
+      relinearize_threshold_gyro_bias;
+  nh_private_.getParam("isam2/relinearize_threshold_rot",
+                       relinearize_threshold_rot);
+  nh_private_.getParam("isam2/relinearize_threshold_pos",
+                       relinearize_threshold_pos);
+  nh_private_.getParam("isam2/relinearize_threshold_vel",
+                       relinearize_threshold_vel);
+  nh_private_.getParam("isam2/relinearize_threshold_acc_bias",
+                       relinearize_threshold_acc_bias);
+  nh_private_.getParam("isam2/relinearize_threshold_gyro_bias",
+                       relinearize_threshold_gyro_bias);
+  gtsam::FastMap<char, gtsam::Vector> thresholds;
+  thresholds['x'] =
+      (gtsam::Vector(6) << Eigen::Vector3d::Constant(relinearize_threshold_rot),
+       Eigen::Vector3d::Constant(relinearize_threshold_pos))
+          .finished();
+  thresholds['v'] = Eigen::Vector3d::Constant(relinearize_threshold_vel);
+  thresholds['b'] = (gtsam::Vector(6) << Eigen::Vector3d::Constant(
+                         relinearize_threshold_acc_bias),
+                     Eigen::Vector3d::Constant(relinearize_threshold_gyro_bias))
+                        .finished();
+  parameters.relinearizeThreshold = thresholds;
+  nh_private_.getParam("isam2/relinearize_skip", parameters.relinearizeSkip);
   isam2_ = gtsam::ISAM2(parameters);
 
   // Subscribe to topics.
@@ -200,7 +222,7 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
   // Do not update prediction while initial values are updated.
   std::unique_lock<std::recursive_mutex> lock(update_mtx_);
   ROS_INFO_ONCE("Received first IMU message.");
-  if (!init_.isInitialized()) {
+  if (!isInitialized()) {
     // Gravitational acceleration in inertial frame (ENU).
     Eigen::Vector3d I_g(0, 0, -9.81);
     // Gravitational acceleration in base frame (IMU).
@@ -264,7 +286,7 @@ void MavStateEstimator::posCallback(
   ROS_INFO_ONCE("Received first POS message.");
   Eigen::Vector3d I_t_P;
   tf::pointMsgToEigen(pos_msg->position.position, I_t_P);
-  if (!init_.isInitialized()) {
+  if (!isInitialized()) {
     // GNSS antenna position in inertial frame (ENU).
     init_.addPositionConstraint(I_t_P, B_t_P_, pos_msg->header.stamp);
     init_.setInertialFrame(pos_msg->header.frame_id);
@@ -326,7 +348,7 @@ void MavStateEstimator::baselineCallback(
   // Do not update factors while initial values are updated.
   std::unique_lock<std::recursive_mutex> lock(update_mtx_);
   ROS_INFO_ONCE("Received first BASELINE message.");
-  if (!init_.isInitialized()) {
+  if (!isInitialized()) {
     // TODO(rikba): Use ECEF frame by default.
     // Moving baseline heading in inertial frame (ENU).
     Eigen::Vector3d I_h_NED;

@@ -79,6 +79,7 @@ class MavStateEstimator {
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_imu_bias_;
 
   void initializeState();
+  inline bool isInitialized() const { return !stamp_to_idx_.empty(); }
   std::set<uint32_t> unary_times_ns_;
   std::map<ros::Time, uint64_t> stamp_to_idx_;
   std::map<uint64_t, ros::Time> idx_to_stamp_;

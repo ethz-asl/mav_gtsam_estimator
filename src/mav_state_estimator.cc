@@ -10,6 +10,7 @@
 
 #include "mav_state_estimation/Timing.h"
 #include "mav_state_estimation/absolute_position_factor.h"
+#include "mav_state_estimation/moving_baseline_factor.h"
 
 using gtsam::symbol_shorthand::B;  // Bias  (ax,ay,az,gx,gy,gz)
 using gtsam::symbol_shorthand::V;  // Vel   (xdot,ydot,zdot)
@@ -28,13 +29,15 @@ MavStateEstimator::MavStateEstimator()
   int rate = 0;
   nh_private_.getParam("position_receiver/rate", rate);
   addSensorTimes(rate);
-  nh_private_.getParam("position_receiver/rate", pos_receiver_cov_scale_);
+  nh_private_.getParam("position_receiver/scale_cov", pos_receiver_cov_scale_);
   ROS_INFO_STREAM("Position receiver cov scale: " << pos_receiver_cov_scale_);
 
   B_t_A_ = getVectorFromParams("attitude_receiver/B_t");
   ROS_INFO_STREAM("Initial guess B_t_A: " << B_t_A_.transpose());
   nh_private_.getParam("attitude_receiver/rate", rate);
   addSensorTimes(rate);
+  nh_private_.getParam("attitude_receiver/scale_cov", att_receiver_cov_scale_);
+  ROS_INFO_STREAM("Attitude receiver cov scale: " << att_receiver_cov_scale_);
 
   Eigen::Vector3d prior_noise_rot_IB, prior_noise_I_t_B;
   prior_noise_rot_IB = getVectorFromParams("prior_noise_rot_IB");
@@ -119,6 +122,7 @@ MavStateEstimator::MavStateEstimator()
                      Eigen::Vector3d::Constant(relinearize_threshold_gyro_bias))
                         .finished();
   parameters.relinearizeThreshold = thresholds;
+  // parameters.optimizationParams = gtsam::ISAM2DoglegParams();
   nh_private_.getParam("isam2/relinearize_skip", parameters.relinearizeSkip);
   isam2_ = gtsam::ISAM2(parameters);
 
@@ -351,15 +355,34 @@ void MavStateEstimator::baselineCallback(
   // Do not update factors while initial values are updated.
   std::unique_lock<std::recursive_mutex> lock(update_mtx_);
   ROS_INFO_ONCE("Received first BASELINE message.");
+  Eigen::Vector3d NED_t_PA;
+  tf::pointMsgToEigen(baseline_msg->position.position, NED_t_PA);
+  // TODO(rikba): Use ECEF frame by default.
+  // TODO(rikba): Account for different frame positions. This rotation is only
+  // correct if ENU and NED origin coincide.
+  const auto R_ENU_NED =
+      (Eigen::Matrix3d() << 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, -1.0)
+          .finished();
+  Eigen::Vector3d I_t_PA = R_ENU_NED * NED_t_PA;
+  // Moving baseline heading in base frame (IMU).
+  const Eigen::Vector3d B_t_PA = B_t_A_ - B_t_P_;
   if (!isInitialized()) {
-    // TODO(rikba): Use ECEF frame by default.
-    // Moving baseline heading in inertial frame (ENU).
-    Eigen::Vector3d I_h_NED;
-    tf::pointMsgToEigen(baseline_msg->position.position, I_h_NED);
-    Eigen::Vector3d I_h(I_h_NED.y(), I_h_NED.x(), -I_h_NED.z());
-    // Moving baseline heading in base frame (IMU).
-    Eigen::Vector3d B_h = B_t_A_ - B_t_P_;
-    init_.addOrientationConstraint2(I_h, B_h, baseline_msg->header.stamp);
+    init_.addOrientationConstraint2(I_t_PA, B_t_PA, baseline_msg->header.stamp);
+  } else if (addUnaryStamp(baseline_msg->header.stamp)) {
+    const bool kSmart = false;
+    auto cov = gtsam::noiseModel::Gaussian::Covariance(
+        R_ENU_NED * att_receiver_cov_scale_ *
+            Matrix3dRow::Map(baseline_msg->position.covariance.data()) *
+            R_ENU_NED.transpose(),
+        kSmart);
+    MovingBaselineFactor::shared_ptr baseline_factor =
+        boost::make_shared<MovingBaselineFactor>(
+            X(stamp_to_idx_[baseline_msg->header.stamp]), I_t_PA, B_t_PA, cov);
+    new_unary_factors_.emplace_back(stamp_to_idx_[baseline_msg->header.stamp],
+                                    baseline_factor);
+    solve();
+  } else {
+    ROS_WARN("Failed to add unary baseline factor.");
   }
 }
 

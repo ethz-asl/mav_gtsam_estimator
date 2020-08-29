@@ -1,5 +1,5 @@
-#ifndef MAV_STATE_ESTIMATION_ABSOLUTE_POSITION_FACTOR_H_
-#define MAV_STATE_ESTIMATION_ABSOLUTE_POSITION_FACTOR_H_
+#ifndef MAV_STATE_ESTIMATION_MOVING_BASELINE_FACTOR_H_
+#define MAV_STATE_ESTIMATION_MOVING_BASELINE_FACTOR_H_
 
 #include <string>
 
@@ -17,16 +17,14 @@
 
 namespace mav_state_estimation {
 
-// Absolute position factor that determines the error and Jacobian w.r.t. a
-// measured position in mission coordinates.
-class AbsolutePositionFactor : public gtsam::NoiseModelFactor1<gtsam::Pose3> {
+// Moving baseline factor that determines the error and Jacobian w.r.t. to the
+// vector between two GNSS antennas in inertial frame.
+class MovingBaselineFactor : public gtsam::NoiseModelFactor1<gtsam::Pose3> {
  public:
-  // Factor that determines the error and jacobian w.r.t. a measured position
-  // in inertial coordinates.
-  AbsolutePositionFactor(
-      gtsam::Key T_I_B_key, const Eigen::Vector3d& I_t_P_measured,
-      const Eigen::Vector3d& B_t_P,
-      const gtsam::noiseModel::Base::shared_ptr& noise_model);
+  MovingBaselineFactor(gtsam::Key T_I_B_key,
+                       const Eigen::Vector3d& I_t_PA_measured,
+                       const Eigen::Vector3d& B_t_PA,
+                       const gtsam::noiseModel::Base::shared_ptr& noise_model);
 
   // Evaluates the error term and corresponding jacobians w.r.t. the pose.
   gtsam::Vector evaluateError(const gtsam::Pose3& T_I_B,
@@ -45,8 +43,8 @@ class AbsolutePositionFactor : public gtsam::NoiseModelFactor1<gtsam::Pose3> {
   bool equals(const gtsam::NonlinearFactor& expected,
               double tolerance) const override;
 
-  // Returns the measured absolute position.
-  inline const Eigen::Vector3d& measured() const { return I_t_P_measured_; }
+  // Returns the measured moving baseline.
+  inline const Eigen::Vector3d& measured() const { return I_t_PA_measured_; }
 
   // Returns the number of variables attached to this factor. This is a unary
   // factor.
@@ -57,24 +55,25 @@ class AbsolutePositionFactor : public gtsam::NoiseModelFactor1<gtsam::Pose3> {
 
   // Factory method.
   inline static shared_ptr Create(
-      gtsam::Key T_I_B_key, const Eigen::Vector3d& I_t_P_measured,
-      const Eigen::Vector3d& B_t_P,
+      gtsam::Key T_I_B_key, const Eigen::Vector3d& I_t_PA_measured,
+      const Eigen::Vector3d& B_t_PA,
       const gtsam::noiseModel::Base::shared_ptr& noise_model) {
-    return shared_ptr(new AbsolutePositionFactor(T_I_B_key, I_t_P_measured,
-                                                 B_t_P, noise_model));
+    return shared_ptr(new MovingBaselineFactor(T_I_B_key, I_t_PA_measured,
+                                               B_t_PA, noise_model));
   }
 
  protected:
-  // Absolute position measurement in local mission coordinates.
-  const Eigen::Vector3d I_t_P_measured_;
-  // Extrinsic calibration from base frame to position sensor.
-  const Eigen::Vector3d B_t_P_;
+  // Moving baseline measurement in inertial frame coordinates.
+  const Eigen::Vector3d I_t_PA_measured_;
+  // Extrinsic calibration from reference receiver antenna to attitude receiver
+  // antenna in base frame.
+  const Eigen::Vector3d B_t_PA_;
 
  private:
   typedef gtsam::NoiseModelFactor1<gtsam::Pose3> Base;
-  typedef AbsolutePositionFactor This;
+  typedef MovingBaselineFactor This;
 };
 
 }  // namespace mav_state_estimation
 
-#endif  // MAV_STATE_ESTIMATION_ABSOLUTE_POSITION_FACTOR_H_
+#endif  // MAV_STATE_ESTIMATION_MOVING_BASELINE_FACTOR_H_

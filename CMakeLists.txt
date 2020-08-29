@@ -17,6 +17,7 @@ cs_add_library(${PROJECT_NAME}
   src/absolute_position_factor.cc
   src/initialization.cc
   src/mav_state_estimator.cc
+  src/moving_baseline_factor.cc
 )
 target_link_libraries(${PROJECT_NAME} gtsam)
 

@@ -202,9 +202,6 @@ void MavStateEstimator::initializeState() {
     new_unary_factors_.emplace_back(0, prior_vel);
     new_unary_factors_.emplace_back(0, prior_bias);
 
-    inertial_frame_ = T_IB_0.header.frame_id;
-    base_frame_ = T_IB_0.child_frame_id;
-
     // Initialize time stamps.
     stamp_to_idx_[T_IB_0.header.stamp] = 0;
     idx_to_stamp_[stamp_to_idx_[T_IB_0.header.stamp]] = T_IB_0.header.stamp;
@@ -231,8 +228,9 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     Eigen::Vector3d B_g;
     tf::vectorMsgToEigen(imu_msg->linear_acceleration, B_g);
     B_g *= -1.0;
+    base_frame_ = imu_msg->header.frame_id;
+    init_.setBaseFrame(base_frame_);
     init_.addOrientationConstraint1(I_g, B_g, imu_msg->header.stamp);
-    init_.setBaseFrame(imu_msg->header.frame_id);
     initializeState();
   } else if (imu_msg->header.stamp > idx_to_stamp_[idx_ + 1]) {
     // Handle dropped IMU message.
@@ -290,8 +288,9 @@ void MavStateEstimator::posCallback(
   tf::pointMsgToEigen(pos_msg->position.position, I_t_P);
   if (!isInitialized()) {
     // GNSS antenna position in inertial frame (ENU).
+    inertial_frame_ = pos_msg->header.frame_id;
+    init_.setInertialFrame(inertial_frame_);
     init_.addPositionConstraint(I_t_P, B_t_P_, pos_msg->header.stamp);
-    init_.setInertialFrame(pos_msg->header.frame_id);
   } else if (addUnaryStamp(pos_msg->header.stamp)) {
     const bool kSmart = false;
     auto cov = gtsam::noiseModel::Gaussian::Covariance(

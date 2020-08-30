@@ -15,15 +15,15 @@ MovingBaselineFactor::MovingBaselineFactor(
 }
 
 gtsam::Vector MovingBaselineFactor::evaluateError(
-    const gtsam::Pose3& T_I_B, boost::optional<gtsam::Matrix&> H) const {
+    const gtsam::Pose3& T_I_B, boost::optional<gtsam::Matrix&> D_Tt_T) const {
   // h(R,p) = R_IB * (B_t_PA)
   Eigen::Vector3d h;
-  if (H) {
+  if (D_Tt_T) {
     gtsam::Matrix33 D_Rt_R;
     h = T_I_B.rotation().rotate(B_t_PA_, D_Rt_R);
-    H->resize(3, 6);
-    H->leftCols<3>() = D_Rt_R;
-    H->rightCols<3>() = gtsam::Matrix::Zero(3, 3);
+    D_Tt_T->resize(3, 6);
+    D_Tt_T->leftCols<3>() = D_Rt_R;
+    D_Tt_T->rightCols<3>() = gtsam::Matrix::Zero(3, 3);
   } else {
     h = T_I_B.rotation().rotate(B_t_PA_);
   }

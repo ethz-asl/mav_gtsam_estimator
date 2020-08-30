@@ -15,12 +15,12 @@ AbsolutePositionFactor::AbsolutePositionFactor(
 }
 
 gtsam::Vector AbsolutePositionFactor::evaluateError(
-    const gtsam::Pose3& T_I_B, boost::optional<gtsam::Matrix&> H) const {
+    const gtsam::Pose3& T_I_B, boost::optional<gtsam::Matrix&> D_Tt_T) const {
   // h(R,p) = I_t_B + R_I_B * B_t_P
   gtsam::Vector3 h;
-  if (H) {
-    H->resize(3, 6);
-    h = T_I_B.transform_from(B_t_P_, H);
+  if (D_Tt_T) {
+    D_Tt_T->resize(3, 6);
+    h = T_I_B.transform_from(B_t_P_, D_Tt_T);
   } else {
     h = T_I_B.transform_from(B_t_P_);
   }

@@ -29,7 +29,7 @@ class AbsolutePositionFactor : public gtsam::NoiseModelFactor1<gtsam::Pose3> {
   // Evaluates the error term and corresponding jacobians w.r.t. the pose.
   gtsam::Vector evaluateError(
       const gtsam::Pose3& T_I_B,
-      boost::optional<gtsam::Matrix&> H = boost::none) const override;
+      boost::optional<gtsam::Matrix&> D_Tt_T = boost::none) const override;
 
   // Returns a deep copy of the factor.
   gtsam::NonlinearFactor::shared_ptr clone() const override;

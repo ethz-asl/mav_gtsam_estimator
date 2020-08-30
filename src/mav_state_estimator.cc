@@ -482,6 +482,17 @@ void MavStateEstimator::solveThreaded(
   gttoc_(solveThreaded);
   gtsam::tictoc_finishedIteration_();
 
+  // Print.
+  // static uint32_t iteration = 0;
+  // char buffer[50];
+  // sprintf(buffer, "/tmp/graph_%04d.dot", iteration);
+  // std::ofstream os(buffer);
+  // ROS_INFO_STREAM("Storing graph " << iteration);
+  // isam2_.getFactorsUnsafe().saveGraph(os, isam2_.getLinearizationPoint());
+  // ROS_INFO_STREAM("Storing bayes " << iteration);
+  // sprintf(buffer, "/tmp/bayes_%04d.dot", iteration++);
+  // isam2_.saveGraph(buffer);
+
   // ROS publishers
   tictoc_getNode(solveThreaded, solveThreaded);
   timing_msg_.header.stamp = *time;

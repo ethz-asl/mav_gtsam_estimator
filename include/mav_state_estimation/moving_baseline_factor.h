@@ -27,9 +27,9 @@ class MovingBaselineFactor : public gtsam::NoiseModelFactor1<gtsam::Pose3> {
                        const gtsam::noiseModel::Base::shared_ptr& noise_model);
 
   // Evaluates the error term and corresponding jacobians w.r.t. the pose.
-  gtsam::Vector evaluateError(const gtsam::Pose3& T_I_B,
-                              boost::optional<gtsam::Matrix&> J_err_wrt_T_I_B =
-                                  boost::none) const override;
+  gtsam::Vector evaluateError(
+      const gtsam::Pose3& T_I_B,
+      boost::optional<gtsam::Matrix&> H = boost::none) const override;
 
   // Returns a deep copy of the factor.
   gtsam::NonlinearFactor::shared_ptr clone() const override;

@@ -29,8 +29,11 @@
         name="record"
         output="screen"
         args="--output-prefix=$(arg bag_base)_estimator
-        /$(arg mav_name)/mav_state_estimator/navigation_odometry
-        /$(arg mav_name)/mav_state_estimator/incremental_smoothing_odometry"/>
+        /$(arg mav_name)/mav_state_estimator/optimization
+        /$(arg mav_name)/mav_state_estimator/prediction
+        /$(arg mav_name)/mav_state_estimator/acc_bias
+        /$(arg mav_name)/mav_state_estimator/gyro_bias
+        /$(arg mav_name)/piksi/attitude_receiver_0/ros/baseline_ned"/>
     </group>
 
     <!-- Viz -->

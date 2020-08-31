@@ -48,9 +48,6 @@ class AbsolutePositionFactor
   // Returns the measured absolute position.
   inline const gtsam::Point3& measured() const { return I_t_P_measured_; }
 
-  // Returns the dimension of the measurement.
-  inline size_t dim() const { return 3u; }
-
   // Factory method.
   inline static shared_ptr Create(
       gtsam::Key T_I_B_key, gtsam::Key B_t_P_key,

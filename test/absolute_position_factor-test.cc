@@ -37,6 +37,8 @@ TEST(AbsolutePositionFactor, Jacobian) {
   AbsolutePositionFactor factor(X(1), P(1), I_t_P_measured,
                                 noiseModel::Isotropic::Sigma(3, 0.05));
 
+  EXPECT_EQ(3u, factor.dim());
+
   Matrix actual_D_Tt_T, actual_D_Tt_t;
   factor.evaluateError(pose, B_t_P, actual_D_Tt_T, actual_D_Tt_t);
 

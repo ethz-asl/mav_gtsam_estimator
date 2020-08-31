@@ -45,6 +45,8 @@ class MavStateEstimator {
                    const ros::Publisher& pub) const;
   void publishBias(const gtsam::imuBias::ConstantBias& bias,
                    const ros::Time& stamp) const;
+  void publishAntennaPosition(const gtsam::Point3& B_t, const ros::Time& stamp,
+                              const ros::Publisher& pub) const;
 
   void addSensorTimes(const uint16_t rate);
   bool addUnaryStamp(const ros::Time& stamp);
@@ -65,6 +67,8 @@ class MavStateEstimator {
   ros::Publisher optimization_pub_;
   ros::Publisher acc_bias_pub_;
   ros::Publisher gyro_bias_pub_;
+  ros::Publisher position_antenna_pub_;
+  ros::Publisher attitude_antenna_pub_;
 
   tf2_ros::TransformBroadcaster tfb_;
 

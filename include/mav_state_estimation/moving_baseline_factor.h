@@ -51,9 +51,6 @@ class MovingBaselineFactor
   // Returns the measured moving baseline.
   inline const Eigen::Vector3d& measured() const { return I_t_PA_measured_; }
 
-  // Returns the dimension of the measurement.
-  inline size_t dim() const override { return 3u; }
-
   // Factory method.
   inline static shared_ptr Create(
       gtsam::Key T_I_B_key, gtsam::Key B_t_P_key, gtsam::Key B_t_A_key,

@@ -21,7 +21,6 @@ TEST(MovingBaselineFactor, Error) {
   Point3 B_t_P(10.0, 0.0, 0.0);
   Point3 B_t_A(11.0, 0.0, 0.0);
   Point3 I_t_PA_measured(0.0, 1.0, 0.0);
-  Point3 B_t_PA = B_t_A - B_t_P;
 
   MovingBaselineFactor factor(X(1), P(1), A(1), I_t_PA_measured,
                               noiseModel::Isotropic::Sigma(3, 0.05));
@@ -40,6 +39,7 @@ TEST(MovingBaselineFactor, Jacobian) {
 
   MovingBaselineFactor factor(X(1), P(1), A(1), I_t_PA_measured,
                               noiseModel::Isotropic::Sigma(3, 0.05));
+  EXPECT_EQ(3u, factor.dim());
 
   Matrix actual_D_Tt_T, actual_D_Tt_tP, actual_D_Tt_tA;
   factor.evaluateError(pose, B_t_P, B_t_A, actual_D_Tt_T, actual_D_Tt_tP,

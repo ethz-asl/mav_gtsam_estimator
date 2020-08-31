@@ -40,6 +40,7 @@ MavStateEstimator::MavStateEstimator()
       gtsam::noiseModel::Isotropic::Sigma(B_t_P_.size(), prior_noise_B_t_P);
   auto prior_B_t_P = boost::make_shared<gtsam::PriorFactor<gtsam::Point3>>(
       P(0), B_t_P_, prior_noise_model_B_t_P);
+  prior_B_t_P->print("Prior noise model B_t_P:\n");
   new_unary_factors_.emplace_back(0, prior_B_t_P);
 
   B_t_A_ = getVectorFromParams("attitude_receiver/B_t");
@@ -54,6 +55,7 @@ MavStateEstimator::MavStateEstimator()
       gtsam::noiseModel::Isotropic::Sigma(B_t_A_.size(), prior_noise_B_t_A);
   auto prior_B_t_A = boost::make_shared<gtsam::PriorFactor<gtsam::Point3>>(
       A(0), B_t_A_, prior_noise_model_B_t_A);
+  prior_B_t_A->print("Prior noise model B_t_A:\n");
   new_unary_factors_.emplace_back(0, prior_B_t_A);
 
   Eigen::Vector3d prior_noise_rot_IB, prior_noise_I_t_B;
@@ -173,6 +175,10 @@ MavStateEstimator::MavStateEstimator()
       "acc_bias", kQueueSize);
   gyro_bias_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
       "gyro_bias", kQueueSize);
+  position_antenna_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
+      "position_antenna", kQueueSize);
+  attitude_antenna_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
+      "attitude_antenna", kQueueSize);
 }
 
 Eigen::Vector3d MavStateEstimator::getVectorFromParams(
@@ -450,6 +456,16 @@ void MavStateEstimator::publishPose(const gtsam::NavState& state,
   pub.publish(pose);
 }
 
+void MavStateEstimator::publishAntennaPosition(
+    const gtsam::Point3& B_t, const ros::Time& stamp,
+    const ros::Publisher& pub) const {
+  geometry_msgs::Vector3Stamped antenna_position;
+  antenna_position.header.stamp = stamp;
+  antenna_position.header.frame_id = base_frame_;
+  tf::vectorEigenToMsg(B_t, antenna_position.vector);
+  pub.publish(antenna_position);
+}
+
 void MavStateEstimator::publishBias(const gtsam::imuBias::ConstantBias& bias,
                                     const ros::Time& stamp) const {
   geometry_msgs::Vector3Stamped acc_bias, gyro_bias;
@@ -546,6 +562,10 @@ void MavStateEstimator::solveThreaded(
   broadcastTf(new_state, *time, base_frame_ + "_optimization");
   publishPose(new_state, *time, optimization_pub_);
   publishBias(bias, *time);
+  publishAntennaPosition(B_t_P, *time, position_antenna_pub_);
+  publishAntennaPosition(B_t_A, *time, attitude_antenna_pub_);
+
+  ROS_INFO_STREAM("distance: " << (B_t_A - B_t_P).norm());
 
   // Update new values (threadsafe, blocks all sensor callbacks).
   std::unique_lock<std::recursive_mutex> lock(update_mtx_);

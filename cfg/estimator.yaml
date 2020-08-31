@@ -18,12 +18,14 @@ use_2nd_order_coriolis: false
 position_receiver:
   # (Initial) extrinsic calibration
   B_t: [0.139, 0.205, 0.340]
+  prior_noise_B_t: 0.1
   scale_cov: 10.0
   rate: 10
 
 attitude_receiver:
   # (Initial) extrinsic calibration IMU frame
   B_t: [0.139, -0.195, 0.340]
+  prior_noise_B_t: 0.1
   scale_cov: 0.001
   rate: 5
 
@@ -33,4 +35,5 @@ isam2:
   relinearize_threshold_vel: 0.01  # m/s
   relinearize_threshold_acc_bias: 0.01 # m/s**2
   relinearize_threshold_gyro_bias: 0.02 # rad/s
+  relinearize_threshold_antenna_calibration: 0.01 # m
   relinearize_skip: 1

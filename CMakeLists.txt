@@ -21,6 +21,14 @@ cs_add_library(${PROJECT_NAME}
 )
 target_link_libraries(${PROJECT_NAME} gtsam)
 
+#########
+# TESTS #
+#########
+catkin_add_gtest(test_absolute_position_factor
+  test/absolute_position_factor-test.cc
+)
+target_link_libraries(test_absolute_position_factor ${PROJECT_NAME})
+
 ############
 # BINARIES #
 ############

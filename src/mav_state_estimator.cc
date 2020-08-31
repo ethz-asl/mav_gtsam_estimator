@@ -307,11 +307,11 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
       new_graph_.add(imu_factor);
 
       // Add antenna offset calibration factors.
-      auto cal_noise = gtsam::noiseModel::Isotropic::Sigma(3, 1e-3);
-      new_graph_.add(gtsam::BetweenFactor<gtsam::Point3>(P(idx_ - 1), P(idx_),
-                                                         B_t_P_, cal_noise));
-      new_graph_.add(gtsam::BetweenFactor<gtsam::Point3>(A(idx_ - 1), A(idx_),
-                                                         B_t_A_, cal_noise));
+      auto cal_noise = gtsam::noiseModel::Isotropic::Sigma(3, 1.0e-3);
+      new_graph_.add(gtsam::BetweenFactor<gtsam::Point3>(
+          P(idx_ - 1), P(idx_), gtsam::Point3::Zero(), cal_noise));
+      new_graph_.add(gtsam::BetweenFactor<gtsam::Point3>(
+          A(idx_ - 1), A(idx_), gtsam::Point3::Zero(), cal_noise));
 
       new_values_.insert(P(idx_), B_t_P_);
       new_values_.insert(A(idx_), B_t_A_);
@@ -508,6 +508,7 @@ void MavStateEstimator::solve() {
   auto graph = std::make_unique<gtsam::NonlinearFactorGraph>(new_graph_);
   auto values = std::make_unique<gtsam::Values>(new_values_);
   auto time = std::make_unique<ros::Time>(idx_to_stamp_[idx_]);
+  new_values_.print("New values:\n");
   new_graph_.resize(0);
   new_values_.clear();
 
@@ -538,15 +539,15 @@ void MavStateEstimator::solveThreaded(
   gtsam::tictoc_finishedIteration_();
 
   // Print.
-  // static uint32_t iteration = 0;
-  // char buffer[50];
-  // sprintf(buffer, "/tmp/graph_%04d.dot", iteration);
-  // std::ofstream os(buffer);
-  // ROS_INFO_STREAM("Storing graph " << iteration);
-  // isam2_.getFactorsUnsafe().saveGraph(os, isam2_.getLinearizationPoint());
-  // ROS_INFO_STREAM("Storing bayes " << iteration);
-  // sprintf(buffer, "/tmp/bayes_%04d.dot", iteration++);
-  // isam2_.saveGraph(buffer);
+  static uint32_t iteration = 0;
+  char buffer[50];
+  sprintf(buffer, "/tmp/graph_%04d.dot", iteration);
+  std::ofstream os(buffer);
+  ROS_INFO_STREAM("Storing graph " << iteration);
+  isam2_.getFactorsUnsafe().saveGraph(os, isam2_.getLinearizationPoint());
+  ROS_INFO_STREAM("Storing bayes " << iteration);
+  sprintf(buffer, "/tmp/bayes_%04d.dot", iteration++);
+  isam2_.saveGraph(buffer);
 
   // ROS publishers
   tictoc_getNode(solveThreaded, solveThreaded);

@@ -42,6 +42,12 @@ MavStateEstimator::MavStateEstimator()
       P(0), B_t_P_, prior_noise_model_B_t_P);
   prior_B_t_P->print("Prior noise model B_t_P:\n");
   new_unary_factors_.emplace_back(0, prior_B_t_P);
+  double process_noise_B_t_P;
+  nh_private_.getParam("position_receiver/process_noise_B_t",
+                       process_noise_B_t_P);
+  process_noise_model_B_t_P_ =
+      gtsam::noiseModel::Isotropic::Sigma(B_t_P_.size(), process_noise_B_t_P);
+  process_noise_model_B_t_P_->print("Process noise B_t_P:\n");
 
   B_t_A_ = getVectorFromParams("attitude_receiver/B_t");
   ROS_INFO_STREAM("Initial guess B_t_A: " << B_t_A_.transpose());
@@ -57,6 +63,12 @@ MavStateEstimator::MavStateEstimator()
       A(0), B_t_A_, prior_noise_model_B_t_A);
   prior_B_t_A->print("Prior noise model B_t_A:\n");
   new_unary_factors_.emplace_back(0, prior_B_t_A);
+  double process_noise_B_t_A;
+  nh_private_.getParam("attitude_receiver/process_noise_B_t",
+                       process_noise_B_t_A);
+  process_noise_model_B_t_A_ =
+      gtsam::noiseModel::Isotropic::Sigma(B_t_A_.size(), process_noise_B_t_A);
+  process_noise_model_B_t_A_->print("Process noise B_t_A:\n");
 
   Eigen::Vector3d prior_noise_rot_IB, prior_noise_I_t_B;
   prior_noise_rot_IB = getVectorFromParams("prior_noise_rot_IB");
@@ -307,11 +319,12 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
       new_graph_.add(imu_factor);
 
       // Add antenna offset calibration factors.
-      auto cal_noise = gtsam::noiseModel::Isotropic::Sigma(3, 1.0e-3);
       new_graph_.add(gtsam::BetweenFactor<gtsam::Point3>(
-          P(idx_ - 1), P(idx_), gtsam::Point3::Zero(), cal_noise));
+          P(idx_ - 1), P(idx_), gtsam::Point3::Zero(),
+          process_noise_model_B_t_P_));
       new_graph_.add(gtsam::BetweenFactor<gtsam::Point3>(
-          A(idx_ - 1), A(idx_), gtsam::Point3::Zero(), cal_noise));
+          A(idx_ - 1), A(idx_), gtsam::Point3::Zero(),
+          process_noise_model_B_t_A_));
 
       new_values_.insert(P(idx_), B_t_P_);
       new_values_.insert(A(idx_), B_t_A_);
@@ -508,7 +521,6 @@ void MavStateEstimator::solve() {
   auto graph = std::make_unique<gtsam::NonlinearFactorGraph>(new_graph_);
   auto values = std::make_unique<gtsam::Values>(new_values_);
   auto time = std::make_unique<ros::Time>(idx_to_stamp_[idx_]);
-  new_values_.print("New values:\n");
   new_graph_.resize(0);
   new_values_.clear();
 
@@ -539,15 +551,15 @@ void MavStateEstimator::solveThreaded(
   gtsam::tictoc_finishedIteration_();
 
   // Print.
-  static uint32_t iteration = 0;
-  char buffer[50];
-  sprintf(buffer, "/tmp/graph_%04d.dot", iteration);
-  std::ofstream os(buffer);
-  ROS_INFO_STREAM("Storing graph " << iteration);
-  isam2_.getFactorsUnsafe().saveGraph(os, isam2_.getLinearizationPoint());
-  ROS_INFO_STREAM("Storing bayes " << iteration);
-  sprintf(buffer, "/tmp/bayes_%04d.dot", iteration++);
-  isam2_.saveGraph(buffer);
+  // static uint32_t iteration = 0;
+  // char buffer[50];
+  // sprintf(buffer, "/tmp/graph_%04d.dot", iteration);
+  // std::ofstream os(buffer);
+  // ROS_INFO_STREAM("Storing graph " << iteration);
+  // isam2_.getFactorsUnsafe().saveGraph(os, isam2_.getLinearizationPoint());
+  // ROS_INFO_STREAM("Storing bayes " << iteration);
+  // sprintf(buffer, "/tmp/bayes_%04d.dot", iteration++);
+  // isam2_.saveGraph(buffer);
 
   // ROS publishers
   tictoc_getNode(solveThreaded, solveThreaded);
@@ -565,8 +577,6 @@ void MavStateEstimator::solveThreaded(
   publishBias(bias, *time);
   publishAntennaPosition(B_t_P, *time, position_antenna_pub_);
   publishAntennaPosition(B_t_A, *time, attitude_antenna_pub_);
-
-  ROS_INFO_STREAM("distance: " << (B_t_A - B_t_P).norm());
 
   // Update new values (threadsafe, blocks all sensor callbacks).
   std::unique_lock<std::recursive_mutex> lock(update_mtx_);

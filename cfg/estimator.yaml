@@ -18,14 +18,16 @@ use_2nd_order_coriolis: false
 position_receiver:
   # (Initial) extrinsic calibration
   B_t: [0.139, 0.205, 0.340]
-  prior_noise_B_t: 0.1
+  prior_noise_B_t: 0.001
+  process_noise_B_t: 1.0e-6
   scale_cov: 10.0
   rate: 10
 
 attitude_receiver:
   # (Initial) extrinsic calibration IMU frame
   B_t: [0.139, -0.195, 0.340]
-  prior_noise_B_t: 0.1
+  prior_noise_B_t: 0.001
+  process_noise_B_t: 1.0e-6
   scale_cov: 0.001
   rate: 5
 

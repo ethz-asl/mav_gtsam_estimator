@@ -76,6 +76,8 @@ class MavStateEstimator {
   Initialization init_;
   gtsam::Point3 B_t_P_ = Eigen::Vector3d::Zero();  // Position receiver.
   gtsam::Point3 B_t_A_ = Eigen::Vector3d::Zero();  // Attitude receiver.
+  gtsam::noiseModel::Isotropic::shared_ptr process_noise_model_B_t_P_;
+  gtsam::noiseModel::Isotropic::shared_ptr process_noise_model_B_t_A_;
   std::string inertial_frame_;
   std::string base_frame_;
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_T_I_B_;

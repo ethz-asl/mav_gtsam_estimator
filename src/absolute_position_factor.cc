@@ -26,12 +26,10 @@ gtsam::Vector AbsolutePositionFactor::evaluateError(
     if (D_Tt_T) {
       D_Tt_T->resize(3, 6);
       *D_Tt_T = D_Tt_T_tmp;
-      ROS_INFO_STREAM("AbsPos D_Tt_T:\n" << *D_Tt_T);
     }
     if (D_Tt_t) {
       D_Tt_t->resize(3, 3);
       *D_Tt_t = D_Tt_t_tmp;
-      ROS_INFO_STREAM("AbsPos D_Tt_t:\n" << *D_Tt_t);
     }
   } else {
     h = T_I_B.transform_from(B_t_P);

@@ -29,10 +29,10 @@ catkin_add_gtest(test_absolute_position_factor
 )
 target_link_libraries(test_absolute_position_factor ${PROJECT_NAME})
 
-#catkin_add_gtest(test_moving_baseline_factor
-#  test/moving_baseline_factor-test.cc
-#)
-#target_link_libraries(test_moving_baseline_factor ${PROJECT_NAME})
+catkin_add_gtest(test_moving_baseline_factor
+  test/moving_baseline_factor-test.cc
+)
+target_link_libraries(test_moving_baseline_factor ${PROJECT_NAME})
 
 ############
 # BINARIES #

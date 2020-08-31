@@ -29,18 +29,15 @@ gtsam::Vector MovingBaselineFactor::evaluateError(
       D_Tt_T->resize(3, 6);
       D_Tt_T->leftCols<3>() = D_Rt_R;
       D_Tt_T->rightCols<3>() = gtsam::Matrix::Zero(3, 3);
-      ROS_INFO_STREAM("MovBas D_Tt_T:\n" << *D_Tt_T);
     }
     if (D_Tt_tP) {
       D_Tt_tP->resize(3, 3);
       // The partial derivative D_Rt_tA is matrix R*I, thus this one is -R*I.
       *D_Tt_tP = -D_Rt_tA;
-      ROS_INFO_STREAM("MovBas D_Tt_tP:\n" << *D_Tt_tP);
     }
     if (D_Tt_tA) {
       D_Tt_tA->resize(3, 3);
       *D_Tt_tA = D_Rt_tA;
-      ROS_INFO_STREAM("MovBas D_Tt_tA:\n" << *D_Tt_tA);
     }
   } else {
     h = T_I_B.rotation().rotate(B_t_PA);

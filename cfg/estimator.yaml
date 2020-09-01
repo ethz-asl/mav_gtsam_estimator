@@ -15,10 +15,12 @@ gyro_sigma: 0.0002
 integration_sigma: 1.0e-7
 use_2nd_order_coriolis: false
 
+estimate_antenna_positions: true
+
 position_receiver:
   # (Initial) extrinsic calibration
   B_t: [0.139, 0.205, 0.340]
-  prior_noise_B_t: 0.001
+  prior_noise_B_t: 0.01
   process_noise_B_t: 1.0e-6
   scale_cov: 10.0
   rate: 10
@@ -26,7 +28,7 @@ position_receiver:
 attitude_receiver:
   # (Initial) extrinsic calibration IMU frame
   B_t: [0.139, -0.195, 0.340]
-  prior_noise_B_t: 0.001
+  prior_noise_B_t: 0.01
   process_noise_B_t: 1.0e-6
   scale_cov: 0.001
   rate: 5

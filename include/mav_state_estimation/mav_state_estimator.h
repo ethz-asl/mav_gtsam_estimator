@@ -48,6 +48,11 @@ class MavStateEstimator {
   void publishAntennaPosition(const gtsam::Point3& B_t, const ros::Time& stamp,
                               const ros::Publisher& pub) const;
 
+  void loadGnssParams(const std::string& antenna_ns,
+                      const gtsam::Symbol& symbol, gtsam::Point3* B_t,
+                      gtsam::noiseModel::Isotropic::shared_ptr* process_noise,
+                      double* cov_scale);
+
   void addSensorTimes(const uint16_t rate);
   bool addUnaryStamp(const ros::Time& stamp);
   gtsam::imuBias::ConstantBias getCurrentBias();
@@ -83,6 +88,7 @@ class MavStateEstimator {
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_T_I_B_;
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_I_v_B_;
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_imu_bias_;
+  bool estimate_antenna_positions_ = false;
 
   double pos_receiver_cov_scale_ = 1.0;
   double att_receiver_cov_scale_ = 1.0;

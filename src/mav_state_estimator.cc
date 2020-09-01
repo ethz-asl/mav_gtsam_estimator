@@ -26,49 +26,14 @@ namespace mav_state_estimation {
 MavStateEstimator::MavStateEstimator()
     : nh_(ros::NodeHandle()), nh_private_(ros::NodeHandle("~")) {
   // Get parameters.
-  // Initial values.
-  B_t_P_ = getVectorFromParams("position_receiver/B_t");
-  ROS_INFO_STREAM("Initial guess B_t_P: " << B_t_P_.transpose());
-  int rate = 0;
-  nh_private_.getParam("position_receiver/rate", rate);
-  addSensorTimes(rate);
-  nh_private_.getParam("position_receiver/scale_cov", pos_receiver_cov_scale_);
-  ROS_INFO_STREAM("Position receiver cov scale: " << pos_receiver_cov_scale_);
-  double prior_noise_B_t_P;
-  nh_private_.getParam("position_receiver/prior_noise_B_t", prior_noise_B_t_P);
-  auto prior_noise_model_B_t_P =
-      gtsam::noiseModel::Isotropic::Sigma(B_t_P_.size(), prior_noise_B_t_P);
-  auto prior_B_t_P = boost::make_shared<gtsam::PriorFactor<gtsam::Point3>>(
-      P(0), B_t_P_, prior_noise_model_B_t_P);
-  prior_B_t_P->print("Prior noise model B_t_P:\n");
-  new_unary_factors_.emplace_back(0, prior_B_t_P);
-  double process_noise_B_t_P;
-  nh_private_.getParam("position_receiver/process_noise_B_t",
-                       process_noise_B_t_P);
-  process_noise_model_B_t_P_ =
-      gtsam::noiseModel::Isotropic::Sigma(B_t_P_.size(), process_noise_B_t_P);
-  process_noise_model_B_t_P_->print("Process noise B_t_P:\n");
 
-  B_t_A_ = getVectorFromParams("attitude_receiver/B_t");
-  ROS_INFO_STREAM("Initial guess B_t_A: " << B_t_A_.transpose());
-  nh_private_.getParam("attitude_receiver/rate", rate);
-  addSensorTimes(rate);
-  nh_private_.getParam("attitude_receiver/scale_cov", att_receiver_cov_scale_);
-  ROS_INFO_STREAM("Attitude receiver cov scale: " << att_receiver_cov_scale_);
-  double prior_noise_B_t_A;
-  nh_private_.getParam("attitude_receiver/prior_noise_B_t", prior_noise_B_t_A);
-  auto prior_noise_model_B_t_A =
-      gtsam::noiseModel::Isotropic::Sigma(B_t_A_.size(), prior_noise_B_t_A);
-  auto prior_B_t_A = boost::make_shared<gtsam::PriorFactor<gtsam::Point3>>(
-      A(0), B_t_A_, prior_noise_model_B_t_A);
-  prior_B_t_A->print("Prior noise model B_t_A:\n");
-  new_unary_factors_.emplace_back(0, prior_B_t_A);
-  double process_noise_B_t_A;
-  nh_private_.getParam("attitude_receiver/process_noise_B_t",
-                       process_noise_B_t_A);
-  process_noise_model_B_t_A_ =
-      gtsam::noiseModel::Isotropic::Sigma(B_t_A_.size(), process_noise_B_t_A);
-  process_noise_model_B_t_A_->print("Process noise B_t_A:\n");
+  // GNSS
+  nh_private_.getParam("estimate_antenna_positions",
+                       estimate_antenna_positions_);
+  loadGnssParams("position_receiver", P(0), &B_t_P_,
+                 &process_noise_model_B_t_P_, &pos_receiver_cov_scale_);
+  loadGnssParams("attitude_receiver", A(0), &B_t_A_,
+                 &process_noise_model_B_t_A_, &att_receiver_cov_scale_);
 
   Eigen::Vector3d prior_noise_rot_IB, prior_noise_I_t_B;
   prior_noise_rot_IB = getVectorFromParams("prior_noise_rot_IB");
@@ -193,6 +158,46 @@ MavStateEstimator::MavStateEstimator()
       "attitude_antenna", kQueueSize);
 }
 
+void MavStateEstimator::loadGnssParams(
+    const std::string& antenna_ns, const gtsam::Symbol& symbol,
+    gtsam::Point3* B_t, gtsam::noiseModel::Isotropic::shared_ptr* process_noise,
+    double* cov_scale) {
+  assert(B_t);
+  assert(cov_scale);
+
+  // General GNSS parameters.
+  *B_t = getVectorFromParams(antenna_ns + "/B_t");
+  ROS_INFO_STREAM("Initial guess " << antenna_ns.c_str()
+                                   << "location: " << B_t->transpose());
+  int rate = 0;
+  nh_private_.getParam(antenna_ns + "/rate", rate);
+  addSensorTimes(rate);
+  nh_private_.getParam(antenna_ns + "/scale_cov", *cov_scale);
+  ROS_INFO_STREAM(antenna_ns.c_str() << " cov scale: " << *cov_scale);
+
+  if (estimate_antenna_positions_) {
+    // Prior
+    double prior_noise_B_t;
+    nh_private_.getParam(antenna_ns + "/prior_noise_B_t", prior_noise_B_t);
+    auto prior_noise =
+        gtsam::noiseModel::Isotropic::Sigma(B_t->size(), prior_noise_B_t);
+    auto prior_B_t = boost::make_shared<gtsam::PriorFactor<gtsam::Point3>>(
+        symbol, *B_t, prior_noise);
+    prior_B_t->print(antenna_ns + " prior factor:\n");
+    new_unary_factors_.emplace_back(0, prior_B_t);
+
+    // Initial value
+    new_values_.insert(symbol, *B_t);
+
+    // Process noise
+    double process_noise_B_t;
+    nh_private_.getParam(antenna_ns + "/process_noise_B_t", process_noise_B_t);
+    *process_noise =
+        gtsam::noiseModel::Isotropic::Sigma(B_t->size(), process_noise_B_t);
+    process_noise_model_B_t_P_->print(antenna_ns + " process noise:\n");
+  }
+}
+
 Eigen::Vector3d MavStateEstimator::getVectorFromParams(
     const std::string& param) const {
   std::vector<double> vec;
@@ -234,8 +239,6 @@ void MavStateEstimator::initializeState() {
     new_values_.insert(X(0), T_IB);
     new_values_.insert(V(0), I_v_B);
     new_values_.insert(B(0), prev_bias_);
-    new_values_.insert(P(0), B_t_P_);
-    new_values_.insert(A(0), B_t_A_);
 
     prev_state_ = gtsam::NavState(T_IB, I_v_B);
 

@@ -321,16 +321,18 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
       integrator_.resetIntegrationAndSetBias(prev_bias_);
       new_graph_.add(imu_factor);
 
-      // Add antenna offset calibration factors.
-      new_graph_.add(gtsam::BetweenFactor<gtsam::Point3>(
-          P(idx_ - 1), P(idx_), gtsam::Point3::Zero(),
-          process_noise_model_B_t_P_));
-      new_graph_.add(gtsam::BetweenFactor<gtsam::Point3>(
-          A(idx_ - 1), A(idx_), gtsam::Point3::Zero(),
-          process_noise_model_B_t_A_));
+      if (estimate_antenna_positions_) {
+        // Add antenna offset calibration factors.
+        new_graph_.add(gtsam::BetweenFactor<gtsam::Point3>(
+            P(idx_ - 1), P(idx_), gtsam::Point3::Zero(),
+            process_noise_model_B_t_P_));
+        new_graph_.add(gtsam::BetweenFactor<gtsam::Point3>(
+            A(idx_ - 1), A(idx_), gtsam::Point3::Zero(),
+            process_noise_model_B_t_A_));
 
-      new_values_.insert(P(idx_), B_t_P_);
-      new_values_.insert(A(idx_), B_t_A_);
+        new_values_.insert(P(idx_), B_t_P_);
+        new_values_.insert(A(idx_), B_t_A_);
+      }
 
       // Attempt to run solver thread.
       solve();
@@ -359,9 +361,15 @@ void MavStateEstimator::posCallback(
         pos_receiver_cov_scale_ *
             Matrix3dRow::Map(pos_msg->position.covariance.data()),
         kSmart);
-    auto pos_factor = boost::make_shared<AbsolutePositionFactor2>(
-        X(stamp_to_idx_[pos_msg->header.stamp]),
-        P(stamp_to_idx_[pos_msg->header.stamp]), I_t_P, cov);
+    gtsam::NonlinearFactor::shared_ptr pos_factor;
+    if (estimate_antenna_positions_) {
+      pos_factor = boost::make_shared<AbsolutePositionFactor2>(
+          X(stamp_to_idx_[pos_msg->header.stamp]),
+          P(stamp_to_idx_[pos_msg->header.stamp]), I_t_P, cov);
+    } else {
+      pos_factor = boost::make_shared<AbsolutePositionFactor1>(
+          X(stamp_to_idx_[pos_msg->header.stamp]), I_t_P, B_t_P_, cov);
+    }
     new_unary_factors_.emplace_back(stamp_to_idx_[pos_msg->header.stamp],
                                     pos_factor);
     solve();
@@ -431,10 +439,16 @@ void MavStateEstimator::baselineCallback(
         R_ENU_NED * att_receiver_cov_scale_ *
         Matrix3dRow::Map(baseline_msg->position.covariance.data()) *
         R_ENU_NED.transpose());
-    auto baseline_factor = boost::make_shared<MovingBaselineFactor2>(
-        X(stamp_to_idx_[baseline_msg->header.stamp]),
-        P(stamp_to_idx_[baseline_msg->header.stamp]),
-        A(stamp_to_idx_[baseline_msg->header.stamp]), I_t_PA, cov);
+    gtsam::NonlinearFactor::shared_ptr baseline_factor;
+    if (estimate_antenna_positions_) {
+      baseline_factor = boost::make_shared<MovingBaselineFactor2>(
+          X(stamp_to_idx_[baseline_msg->header.stamp]),
+          P(stamp_to_idx_[baseline_msg->header.stamp]),
+          A(stamp_to_idx_[baseline_msg->header.stamp]), I_t_PA, cov);
+    } else {
+      baseline_factor = boost::make_shared<MovingBaselineFactor1>(
+          X(stamp_to_idx_[baseline_msg->header.stamp]), I_t_PA, B_t_PA, cov);
+    }
     new_unary_factors_.emplace_back(stamp_to_idx_[baseline_msg->header.stamp],
                                     baseline_factor);
     solve();
@@ -546,8 +560,12 @@ void MavStateEstimator::solveThreaded(
   auto pose = isam2_.calculateEstimate<gtsam::Pose3>(X(i));
   auto velocity = isam2_.calculateEstimate<gtsam::Velocity3>(V(i));
   auto bias = isam2_.calculateEstimate<gtsam::imuBias::ConstantBias>(B(i));
-  auto B_t_P = isam2_.calculateEstimate<gtsam::Point3>(P(i));
-  auto B_t_A = isam2_.calculateEstimate<gtsam::Point3>(A(i));
+  gtsam::Point3 B_t_P = B_t_P_;
+  gtsam::Point3 B_t_A = B_t_A_;
+  if (estimate_antenna_positions_) {
+    B_t_P = isam2_.calculateEstimate<gtsam::Point3>(P(i));
+    B_t_A = isam2_.calculateEstimate<gtsam::Point3>(A(i));
+  }
   gttoc_(solveThreaded);
   gtsam::tictoc_finishedIteration_();
 
@@ -562,6 +580,36 @@ void MavStateEstimator::solveThreaded(
   // sprintf(buffer, "/tmp/bayes_%04d.dot", iteration++);
   // isam2_.saveGraph(buffer);
 
+  // Update new values (threadsafe, blocks all sensor callbacks).
+  gtsam::NavState new_state(pose, velocity);
+  std::unique_lock<std::recursive_mutex> lock(update_mtx_);
+  {
+    prev_state_ = new_state;
+    prev_bias_ = bias;
+
+    if (estimate_antenna_positions_) {
+      B_t_P_ = B_t_P;
+      B_t_A_ = B_t_A;
+    }
+
+    for (auto it = new_graph_.begin(); it != new_graph_.end(); ++it) {
+      auto imu = boost::dynamic_pointer_cast<gtsam::CombinedImuFactor>(*it);
+      if (imu) {
+        prev_state_ =
+            imu->preintegratedMeasurements().predict(prev_state_, prev_bias_);
+        new_values_.update(X(i + 1), prev_state_.pose());
+        new_values_.update(V(i + 1), prev_state_.velocity());
+        new_values_.update(B(i + 1), prev_bias_);
+        if (estimate_antenna_positions_) {
+          new_values_.update(P(i + 1), B_t_P_);
+          new_values_.update(A(i + 1), B_t_A_);
+        }
+        i++;
+      }
+    }
+    assert(idx_ == i);
+  }
+
   // ROS publishers
   tictoc_getNode(solveThreaded, solveThreaded);
   timing_msg_.header.stamp = *time;
@@ -572,34 +620,11 @@ void MavStateEstimator::solveThreaded(
   timing_msg_.mean = solveThreaded->mean();
   timing_pub_.publish(timing_msg_);
 
-  gtsam::NavState new_state(pose, velocity);
   broadcastTf(new_state, *time, base_frame_ + "_optimization");
   publishPose(new_state, *time, optimization_pub_);
   publishBias(bias, *time);
   publishAntennaPosition(B_t_P, *time, position_antenna_pub_);
   publishAntennaPosition(B_t_A, *time, attitude_antenna_pub_);
-
-  // Update new values (threadsafe, blocks all sensor callbacks).
-  std::unique_lock<std::recursive_mutex> lock(update_mtx_);
-  prev_state_ = new_state;
-  prev_bias_ = bias;
-  B_t_P_ = B_t_P;
-  B_t_A_ = B_t_A;
-
-  for (auto it = new_graph_.begin(); it != new_graph_.end(); ++it) {
-    auto imu = boost::dynamic_pointer_cast<gtsam::CombinedImuFactor>(*it);
-    if (imu) {
-      prev_state_ =
-          imu->preintegratedMeasurements().predict(prev_state_, prev_bias_);
-      new_values_.update(X(i + 1), prev_state_.pose());
-      new_values_.update(V(i + 1), prev_state_.velocity());
-      new_values_.update(B(i + 1), prev_bias_);
-      new_values_.update(P(i + 1), B_t_P_);
-      new_values_.update(A(i + 1), B_t_A_);
-      i++;
-    }
-  }
-  assert(idx_ == i);
 
   is_solving_.store(false);
 }

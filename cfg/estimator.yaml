@@ -15,7 +15,7 @@ gyro_sigma: 0.0002
 integration_sigma: 1.0e-7
 use_2nd_order_coriolis: false
 
-estimate_antenna_positions: true
+estimate_antenna_positions: false
 
 position_receiver:
   # (Initial) extrinsic calibration

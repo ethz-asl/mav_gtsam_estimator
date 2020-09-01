@@ -10,44 +10,75 @@
 
 using namespace gtsam;
 using namespace mav_state_estimation;
+using symbol_shorthand::A;
+using symbol_shorthand::P;
 using symbol_shorthand::X;
 
-TEST(MovingBaselineFactor, Error) {
+TEST(MovingBaselineFactor2, Error) {
   Rot3 R = Rot3::Yaw(M_PI / 2);
   Point3 t(1.0, 0.5, 0.2);
   Pose3 pose(R, t);
   Point3 B_t_P(10.0, 0.0, 0.0);
   Point3 B_t_A(11.0, 0.0, 0.0);
   Point3 I_t_PA_measured(0.0, 1.0, 0.0);
-  Point3 B_t_PA = B_t_A - B_t_P;
 
-  MovingBaselineFactor factor(X(1), I_t_PA_measured, B_t_PA,
-                              noiseModel::Isotropic::Sigma(3, 0.05));
+  MovingBaselineFactor1 factor1(X(1), I_t_PA_measured, B_t_A - B_t_P,
+                                noiseModel::Isotropic::Sigma(3, 0.05));
+  MovingBaselineFactor2 factor2(X(1), P(1), A(1), I_t_PA_measured,
+                                noiseModel::Isotropic::Sigma(3, 0.05));
   Vector expected_error = (Vector(3) << 0.0, 0.0, 0.0).finished();
-  Vector actual_error = factor.evaluateError(pose);
-  EXPECT_TRUE(assert_equal(expected_error, actual_error, 1e-5));
+  Vector actual_error1 = factor1.evaluateError(pose);
+  Vector actual_error2 = factor2.evaluateError(pose, B_t_P, B_t_A);
+  EXPECT_TRUE(assert_equal(expected_error, actual_error1, 1e-5));
+  EXPECT_TRUE(assert_equal(expected_error, actual_error2, 1e-5));
 }
 
-TEST(MovingBaselineFactor, Jacobian) {
-  Rot3 R = Rot3::Yaw(M_PI / 2);
+TEST(MovingBaselineFactor2, Jacobian) {
+  Rot3 R = Rot3::rodriguez(0.1, 0.2, 0.3);
   Point3 t(1.0, 0.5, 0.2);
   Pose3 pose(R, t);
   Point3 B_t_P(10.0, 0.0, 0.0);
   Point3 B_t_A(11.0, 0.0, 0.0);
   Point3 I_t_PA_measured(0.0, 1.0, 0.0);
-  Point3 B_t_PA = B_t_A - B_t_P;
 
-  MovingBaselineFactor factor(X(1), I_t_PA_measured, B_t_PA,
-                              noiseModel::Isotropic::Sigma(3, 0.05));
+  MovingBaselineFactor1 factor1(X(1), I_t_PA_measured, B_t_A - B_t_P,
+                                noiseModel::Isotropic::Sigma(3, 0.05));
+  MovingBaselineFactor2 factor2(X(1), P(1), A(1), I_t_PA_measured,
+                                noiseModel::Isotropic::Sigma(3, 0.05));
 
-  Matrix actual_D_Tt_T;
-  factor.evaluateError(pose, actual_D_Tt_T);
+  Matrix actual1_D_Tt_T;
+  factor1.evaluateError(pose, actual1_D_Tt_T);
 
-  Matrix numerical_D_Tt_T = numericalDerivative11(
+  Matrix numerical1_D_Tt_T = numericalDerivative11(
       boost::function<Vector(const Pose3&)>(boost::bind(
-          &MovingBaselineFactor::evaluateError, factor, _1, boost::none)),
+          &MovingBaselineFactor1::evaluateError, factor1, _1, boost::none)),
       pose, 1e-5);
-  EXPECT_TRUE(assert_equal(numerical_D_Tt_T, actual_D_Tt_T, 1e-5));
+  EXPECT_TRUE(assert_equal(numerical1_D_Tt_T, actual1_D_Tt_T, 1e-5));
+
+  Matrix actual2_D_Tt_T, actual2_D_Tt_TP, actual2_D_Tt_TA;
+  factor2.evaluateError(pose, B_t_P, B_t_A, actual2_D_Tt_T, actual2_D_Tt_TP,
+                        actual2_D_Tt_TA);
+
+  Matrix numerical2_D_Tt_T = numericalDerivative31(
+      boost::function<Vector(const Pose3&, const Point3&, const Point3&)>(
+          boost::bind(&MovingBaselineFactor2::evaluateError, factor2, _1, _2,
+                      _3, boost::none, boost::none, boost::none)),
+      pose, B_t_P, B_t_A, 1e-5);
+  EXPECT_TRUE(assert_equal(numerical2_D_Tt_T, actual2_D_Tt_T, 1e-5));
+
+  Matrix numerical2_D_Tt_TP = numericalDerivative32(
+      boost::function<Vector(const Pose3&, const Point3&, const Point3&)>(
+          boost::bind(&MovingBaselineFactor2::evaluateError, factor2, _1, _2,
+                      _3, boost::none, boost::none, boost::none)),
+      pose, B_t_P, B_t_A, 1e-5);
+  EXPECT_TRUE(assert_equal(numerical2_D_Tt_TP, actual2_D_Tt_TP, 1e-5));
+
+  Matrix numerical2_D_Tt_TA = numericalDerivative33(
+      boost::function<Vector(const Pose3&, const Point3&, const Point3&)>(
+          boost::bind(&MovingBaselineFactor2::evaluateError, factor2, _1, _2,
+                      _3, boost::none, boost::none, boost::none)),
+      pose, B_t_P, B_t_A, 1e-5);
+  EXPECT_TRUE(assert_equal(numerical2_D_Tt_TA, actual2_D_Tt_TA, 1e-5));
 }
 
 int main(int argc, char** argv) {

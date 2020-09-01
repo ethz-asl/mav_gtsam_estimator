@@ -45,6 +45,13 @@ class MavStateEstimator {
                    const ros::Publisher& pub) const;
   void publishBias(const gtsam::imuBias::ConstantBias& bias,
                    const ros::Time& stamp) const;
+  void publishAntennaPosition(const gtsam::Point3& B_t, const ros::Time& stamp,
+                              const ros::Publisher& pub) const;
+
+  void loadGnssParams(const std::string& antenna_ns,
+                      const gtsam::Symbol& symbol, gtsam::Point3* B_t,
+                      gtsam::noiseModel::Isotropic::shared_ptr* process_noise,
+                      double* cov_scale);
 
   void addSensorTimes(const uint16_t rate);
   bool addUnaryStamp(const ros::Time& stamp);
@@ -65,18 +72,23 @@ class MavStateEstimator {
   ros::Publisher optimization_pub_;
   ros::Publisher acc_bias_pub_;
   ros::Publisher gyro_bias_pub_;
+  ros::Publisher position_antenna_pub_;
+  ros::Publisher attitude_antenna_pub_;
 
   tf2_ros::TransformBroadcaster tfb_;
 
   // Initial parameters.
   Initialization init_;
-  Eigen::Vector3d B_t_P_ = Eigen::Vector3d::Zero();  // Position receiver.
-  Eigen::Vector3d B_t_A_ = Eigen::Vector3d::Zero();  // Attitude receiver.
+  gtsam::Point3 B_t_P_ = Eigen::Vector3d::Zero();  // Position receiver.
+  gtsam::Point3 B_t_A_ = Eigen::Vector3d::Zero();  // Attitude receiver.
+  gtsam::noiseModel::Isotropic::shared_ptr process_noise_model_B_t_P_;
+  gtsam::noiseModel::Isotropic::shared_ptr process_noise_model_B_t_A_;
   std::string inertial_frame_;
   std::string base_frame_;
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_T_I_B_;
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_I_v_B_;
   gtsam::noiseModel::Diagonal::shared_ptr prior_noise_model_imu_bias_;
+  bool estimate_antenna_positions_ = false;
 
   double pos_receiver_cov_scale_ = 1.0;
   double att_receiver_cov_scale_ = 1.0;

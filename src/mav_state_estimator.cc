@@ -6,13 +6,16 @@
 #include <geometry_msgs/Vector3Stamped.h>
 #include <gtsam/base/timing.h>
 #include <gtsam/inference/Symbol.h>
+#include <gtsam/slam/BetweenFactor.h>
 #include <ros/ros.h>
 
 #include "mav_state_estimation/Timing.h"
 #include "mav_state_estimation/absolute_position_factor.h"
 #include "mav_state_estimation/moving_baseline_factor.h"
 
+using gtsam::symbol_shorthand::A;  // Attitude receiver antenna (x,y,z)
 using gtsam::symbol_shorthand::B;  // Bias  (ax,ay,az,gx,gy,gz)
+using gtsam::symbol_shorthand::P;  // Position receiver antenna (x,y,z)
 using gtsam::symbol_shorthand::V;  // Vel   (xdot,ydot,zdot)
 using gtsam::symbol_shorthand::X;  // Pose3 (x,y,z,r,p,y)
 
@@ -23,21 +26,14 @@ namespace mav_state_estimation {
 MavStateEstimator::MavStateEstimator()
     : nh_(ros::NodeHandle()), nh_private_(ros::NodeHandle("~")) {
   // Get parameters.
-  // Initial values.
-  B_t_P_ = getVectorFromParams("position_receiver/B_t");
-  ROS_INFO_STREAM("Initial guess B_t_P: " << B_t_P_.transpose());
-  int rate = 0;
-  nh_private_.getParam("position_receiver/rate", rate);
-  addSensorTimes(rate);
-  nh_private_.getParam("position_receiver/scale_cov", pos_receiver_cov_scale_);
-  ROS_INFO_STREAM("Position receiver cov scale: " << pos_receiver_cov_scale_);
 
-  B_t_A_ = getVectorFromParams("attitude_receiver/B_t");
-  ROS_INFO_STREAM("Initial guess B_t_A: " << B_t_A_.transpose());
-  nh_private_.getParam("attitude_receiver/rate", rate);
-  addSensorTimes(rate);
-  nh_private_.getParam("attitude_receiver/scale_cov", att_receiver_cov_scale_);
-  ROS_INFO_STREAM("Attitude receiver cov scale: " << att_receiver_cov_scale_);
+  // GNSS
+  nh_private_.getParam("estimate_antenna_positions",
+                       estimate_antenna_positions_);
+  loadGnssParams("position_receiver", P(0), &B_t_P_,
+                 &process_noise_model_B_t_P_, &pos_receiver_cov_scale_);
+  loadGnssParams("attitude_receiver", A(0), &B_t_A_,
+                 &process_noise_model_B_t_A_, &att_receiver_cov_scale_);
 
   Eigen::Vector3d prior_noise_rot_IB, prior_noise_I_t_B;
   prior_noise_rot_IB = getVectorFromParams("prior_noise_rot_IB");
@@ -100,7 +96,8 @@ MavStateEstimator::MavStateEstimator()
   // TODO(rikba): Set more ISAM2 params here.
   double relinearize_threshold_rot, relinearize_threshold_pos,
       relinearize_threshold_vel, relinearize_threshold_acc_bias,
-      relinearize_threshold_gyro_bias;
+      relinearize_threshold_gyro_bias,
+      relinearize_threshold_antenna_calibration;
   nh_private_.getParam("isam2/relinearize_threshold_rot",
                        relinearize_threshold_rot);
   nh_private_.getParam("isam2/relinearize_threshold_pos",
@@ -111,6 +108,8 @@ MavStateEstimator::MavStateEstimator()
                        relinearize_threshold_acc_bias);
   nh_private_.getParam("isam2/relinearize_threshold_gyro_bias",
                        relinearize_threshold_gyro_bias);
+  nh_private_.getParam("isam2/relinearize_threshold_antenna_calibration",
+                       relinearize_threshold_antenna_calibration);
   gtsam::FastMap<char, gtsam::Vector> thresholds;
   thresholds['x'] =
       (gtsam::Vector(6) << Eigen::Vector3d::Constant(relinearize_threshold_rot),
@@ -121,6 +120,10 @@ MavStateEstimator::MavStateEstimator()
                          relinearize_threshold_acc_bias),
                      Eigen::Vector3d::Constant(relinearize_threshold_gyro_bias))
                         .finished();
+  thresholds['p'] =
+      Eigen::Vector3d::Constant(relinearize_threshold_antenna_calibration);
+  thresholds['a'] =
+      Eigen::Vector3d::Constant(relinearize_threshold_antenna_calibration);
   parameters.relinearizeThreshold = thresholds;
   // parameters.optimizationParams = gtsam::ISAM2DoglegParams();
   nh_private_.getParam("isam2/relinearize_skip", parameters.relinearizeSkip);
@@ -149,6 +152,50 @@ MavStateEstimator::MavStateEstimator()
       "acc_bias", kQueueSize);
   gyro_bias_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
       "gyro_bias", kQueueSize);
+  position_antenna_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
+      "position_antenna", kQueueSize);
+  attitude_antenna_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
+      "attitude_antenna", kQueueSize);
+}
+
+void MavStateEstimator::loadGnssParams(
+    const std::string& antenna_ns, const gtsam::Symbol& symbol,
+    gtsam::Point3* B_t, gtsam::noiseModel::Isotropic::shared_ptr* process_noise,
+    double* cov_scale) {
+  assert(B_t);
+  assert(cov_scale);
+
+  // General GNSS parameters.
+  *B_t = getVectorFromParams(antenna_ns + "/B_t");
+  ROS_INFO_STREAM("Initial guess " << antenna_ns.c_str()
+                                   << "location: " << B_t->transpose());
+  int rate = 0;
+  nh_private_.getParam(antenna_ns + "/rate", rate);
+  addSensorTimes(rate);
+  nh_private_.getParam(antenna_ns + "/scale_cov", *cov_scale);
+  ROS_INFO_STREAM(antenna_ns.c_str() << " cov scale: " << *cov_scale);
+
+  if (estimate_antenna_positions_) {
+    // Prior
+    double prior_noise_B_t;
+    nh_private_.getParam(antenna_ns + "/prior_noise_B_t", prior_noise_B_t);
+    auto prior_noise =
+        gtsam::noiseModel::Isotropic::Sigma(B_t->size(), prior_noise_B_t);
+    auto prior_B_t = boost::make_shared<gtsam::PriorFactor<gtsam::Point3>>(
+        symbol, *B_t, prior_noise);
+    prior_B_t->print(antenna_ns + " prior factor:\n");
+    new_unary_factors_.emplace_back(0, prior_B_t);
+
+    // Initial value
+    new_values_.insert(symbol, *B_t);
+
+    // Process noise
+    double process_noise_B_t;
+    nh_private_.getParam(antenna_ns + "/process_noise_B_t", process_noise_B_t);
+    *process_noise =
+        gtsam::noiseModel::Isotropic::Sigma(B_t->size(), process_noise_B_t);
+    process_noise_model_B_t_P_->print(antenna_ns + " process noise:\n");
+  }
 }
 
 Eigen::Vector3d MavStateEstimator::getVectorFromParams(
@@ -274,6 +321,19 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
       integrator_.resetIntegrationAndSetBias(prev_bias_);
       new_graph_.add(imu_factor);
 
+      if (estimate_antenna_positions_) {
+        // Add antenna offset calibration factors.
+        new_graph_.add(gtsam::BetweenFactor<gtsam::Point3>(
+            P(idx_ - 1), P(idx_), gtsam::Point3::Zero(),
+            process_noise_model_B_t_P_));
+        new_graph_.add(gtsam::BetweenFactor<gtsam::Point3>(
+            A(idx_ - 1), A(idx_), gtsam::Point3::Zero(),
+            process_noise_model_B_t_A_));
+
+        new_values_.insert(P(idx_), B_t_P_);
+        new_values_.insert(A(idx_), B_t_A_);
+      }
+
       // Attempt to run solver thread.
       solve();
     }
@@ -301,9 +361,15 @@ void MavStateEstimator::posCallback(
         pos_receiver_cov_scale_ *
             Matrix3dRow::Map(pos_msg->position.covariance.data()),
         kSmart);
-    AbsolutePositionFactor::shared_ptr pos_factor =
-        boost::make_shared<AbsolutePositionFactor>(
-            X(stamp_to_idx_[pos_msg->header.stamp]), I_t_P, B_t_P_, cov);
+    gtsam::NonlinearFactor::shared_ptr pos_factor;
+    if (estimate_antenna_positions_) {
+      pos_factor = boost::make_shared<AbsolutePositionFactor2>(
+          X(stamp_to_idx_[pos_msg->header.stamp]),
+          P(stamp_to_idx_[pos_msg->header.stamp]), I_t_P, cov);
+    } else {
+      pos_factor = boost::make_shared<AbsolutePositionFactor1>(
+          X(stamp_to_idx_[pos_msg->header.stamp]), I_t_P, B_t_P_, cov);
+    }
     new_unary_factors_.emplace_back(stamp_to_idx_[pos_msg->header.stamp],
                                     pos_factor);
     solve();
@@ -369,15 +435,20 @@ void MavStateEstimator::baselineCallback(
   if (!isInitialized()) {
     init_.addOrientationConstraint2(I_t_PA, B_t_PA, baseline_msg->header.stamp);
   } else if (addUnaryStamp(baseline_msg->header.stamp)) {
-    const bool kSmart = false;
     auto cov = gtsam::noiseModel::Gaussian::Covariance(
         R_ENU_NED * att_receiver_cov_scale_ *
-            Matrix3dRow::Map(baseline_msg->position.covariance.data()) *
-            R_ENU_NED.transpose(),
-        kSmart);
-    MovingBaselineFactor::shared_ptr baseline_factor =
-        boost::make_shared<MovingBaselineFactor>(
-            X(stamp_to_idx_[baseline_msg->header.stamp]), I_t_PA, B_t_PA, cov);
+        Matrix3dRow::Map(baseline_msg->position.covariance.data()) *
+        R_ENU_NED.transpose());
+    gtsam::NonlinearFactor::shared_ptr baseline_factor;
+    if (estimate_antenna_positions_) {
+      baseline_factor = boost::make_shared<MovingBaselineFactor2>(
+          X(stamp_to_idx_[baseline_msg->header.stamp]),
+          P(stamp_to_idx_[baseline_msg->header.stamp]),
+          A(stamp_to_idx_[baseline_msg->header.stamp]), I_t_PA, cov);
+    } else {
+      baseline_factor = boost::make_shared<MovingBaselineFactor1>(
+          X(stamp_to_idx_[baseline_msg->header.stamp]), I_t_PA, B_t_PA, cov);
+    }
     new_unary_factors_.emplace_back(stamp_to_idx_[baseline_msg->header.stamp],
                                     baseline_factor);
     solve();
@@ -411,6 +482,16 @@ void MavStateEstimator::publishPose(const gtsam::NavState& state,
   tf::quaternionEigenToMsg(state.attitude().toQuaternion(),
                            pose.pose.orientation);
   pub.publish(pose);
+}
+
+void MavStateEstimator::publishAntennaPosition(
+    const gtsam::Point3& B_t, const ros::Time& stamp,
+    const ros::Publisher& pub) const {
+  geometry_msgs::Vector3Stamped antenna_position;
+  antenna_position.header.stamp = stamp;
+  antenna_position.header.frame_id = base_frame_;
+  tf::vectorEigenToMsg(B_t, antenna_position.vector);
+  pub.publish(antenna_position);
 }
 
 void MavStateEstimator::publishBias(const gtsam::imuBias::ConstantBias& bias,
@@ -479,6 +560,12 @@ void MavStateEstimator::solveThreaded(
   auto pose = isam2_.calculateEstimate<gtsam::Pose3>(X(i));
   auto velocity = isam2_.calculateEstimate<gtsam::Velocity3>(V(i));
   auto bias = isam2_.calculateEstimate<gtsam::imuBias::ConstantBias>(B(i));
+  gtsam::Point3 B_t_P = B_t_P_;
+  gtsam::Point3 B_t_A = B_t_A_;
+  if (estimate_antenna_positions_) {
+    B_t_P = isam2_.calculateEstimate<gtsam::Point3>(P(i));
+    B_t_A = isam2_.calculateEstimate<gtsam::Point3>(A(i));
+  }
   gttoc_(solveThreaded);
   gtsam::tictoc_finishedIteration_();
 
@@ -493,6 +580,36 @@ void MavStateEstimator::solveThreaded(
   // sprintf(buffer, "/tmp/bayes_%04d.dot", iteration++);
   // isam2_.saveGraph(buffer);
 
+  // Update new values (threadsafe, blocks all sensor callbacks).
+  gtsam::NavState new_state(pose, velocity);
+  std::unique_lock<std::recursive_mutex> lock(update_mtx_);
+  {
+    prev_state_ = new_state;
+    prev_bias_ = bias;
+
+    if (estimate_antenna_positions_) {
+      B_t_P_ = B_t_P;
+      B_t_A_ = B_t_A;
+    }
+
+    for (auto it = new_graph_.begin(); it != new_graph_.end(); ++it) {
+      auto imu = boost::dynamic_pointer_cast<gtsam::CombinedImuFactor>(*it);
+      if (imu) {
+        prev_state_ =
+            imu->preintegratedMeasurements().predict(prev_state_, prev_bias_);
+        new_values_.update(X(i + 1), prev_state_.pose());
+        new_values_.update(V(i + 1), prev_state_.velocity());
+        new_values_.update(B(i + 1), prev_bias_);
+        if (estimate_antenna_positions_) {
+          new_values_.update(P(i + 1), B_t_P_);
+          new_values_.update(A(i + 1), B_t_A_);
+        }
+        i++;
+      }
+    }
+    assert(idx_ == i);
+  }
+
   // ROS publishers
   tictoc_getNode(solveThreaded, solveThreaded);
   timing_msg_.header.stamp = *time;
@@ -503,28 +620,11 @@ void MavStateEstimator::solveThreaded(
   timing_msg_.mean = solveThreaded->mean();
   timing_pub_.publish(timing_msg_);
 
-  gtsam::NavState new_state(pose, velocity);
   broadcastTf(new_state, *time, base_frame_ + "_optimization");
   publishPose(new_state, *time, optimization_pub_);
   publishBias(bias, *time);
-
-  // Update new values (threadsafe, blocks all sensor callbacks).
-  std::unique_lock<std::recursive_mutex> lock(update_mtx_);
-  prev_state_ = new_state;
-  prev_bias_ = bias;
-
-  for (auto it = new_graph_.begin(); it != new_graph_.end(); ++it) {
-    auto imu = boost::dynamic_pointer_cast<gtsam::CombinedImuFactor>(*it);
-    if (imu) {
-      prev_state_ =
-          imu->preintegratedMeasurements().predict(prev_state_, prev_bias_);
-      new_values_.update(X(i + 1), prev_state_.pose());
-      new_values_.update(V(i + 1), prev_state_.velocity());
-      new_values_.update(B(i + 1), prev_bias_);
-      i++;
-    }
-  }
-  assert(idx_ == i);
+  publishAntennaPosition(B_t_P, *time, position_antenna_pub_);
+  publishAntennaPosition(B_t_A, *time, attitude_antenna_pub_);
 
   is_solving_.store(false);
 }

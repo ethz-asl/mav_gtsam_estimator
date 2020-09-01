@@ -359,10 +359,9 @@ void MavStateEstimator::posCallback(
         pos_receiver_cov_scale_ *
             Matrix3dRow::Map(pos_msg->position.covariance.data()),
         kSmart);
-    AbsolutePositionFactor::shared_ptr pos_factor =
-        boost::make_shared<AbsolutePositionFactor>(
-            X(stamp_to_idx_[pos_msg->header.stamp]),
-            P(stamp_to_idx_[pos_msg->header.stamp]), I_t_P, cov);
+    auto pos_factor = boost::make_shared<AbsolutePositionFactor2>(
+        X(stamp_to_idx_[pos_msg->header.stamp]),
+        P(stamp_to_idx_[pos_msg->header.stamp]), I_t_P, cov);
     new_unary_factors_.emplace_back(stamp_to_idx_[pos_msg->header.stamp],
                                     pos_factor);
     solve();
@@ -432,11 +431,10 @@ void MavStateEstimator::baselineCallback(
         R_ENU_NED * att_receiver_cov_scale_ *
         Matrix3dRow::Map(baseline_msg->position.covariance.data()) *
         R_ENU_NED.transpose());
-    MovingBaselineFactor::shared_ptr baseline_factor =
-        boost::make_shared<MovingBaselineFactor>(
-            X(stamp_to_idx_[baseline_msg->header.stamp]),
-            P(stamp_to_idx_[baseline_msg->header.stamp]),
-            A(stamp_to_idx_[baseline_msg->header.stamp]), I_t_PA, cov);
+    auto baseline_factor = boost::make_shared<MovingBaselineFactor2>(
+        X(stamp_to_idx_[baseline_msg->header.stamp]),
+        P(stamp_to_idx_[baseline_msg->header.stamp]),
+        A(stamp_to_idx_[baseline_msg->header.stamp]), I_t_PA, cov);
     new_unary_factors_.emplace_back(stamp_to_idx_[baseline_msg->header.stamp],
                                     baseline_factor);
     solve();

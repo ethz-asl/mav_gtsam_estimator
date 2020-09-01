@@ -19,14 +19,67 @@ namespace mav_state_estimation {
 
 // Moving baseline factor that determines the error and Jacobian w.r.t. to the
 // vector between two GNSS antennas in inertial frame.
-class MovingBaselineFactor
+class MovingBaselineFactor1 : public gtsam::NoiseModelFactor1<gtsam::Pose3> {
+ public:
+  MovingBaselineFactor1(gtsam::Key T_I_B_key,
+                        const Eigen::Vector3d& I_t_PA_measured,
+                        const Eigen::Vector3d& B_t_PA,
+                        const gtsam::noiseModel::Base::shared_ptr& noise_model);
+
+  // Evaluates the error term and corresponding jacobians w.r.t. the pose.
+  gtsam::Vector evaluateError(
+      const gtsam::Pose3& T_I_B,
+      boost::optional<gtsam::Matrix&> D_Tt_T = boost::none) const override;
+
+  // Returns a deep copy of the factor.
+  inline gtsam::NonlinearFactor::shared_ptr clone() const override {
+    return gtsam::NonlinearFactor::shared_ptr(new This(*this));
+  }
+
+  // Prints out information about the factor.
+  void print(const std::string& s,
+             const gtsam::KeyFormatter& key_formatter =
+                 gtsam::DefaultKeyFormatter) const override;
+
+  // Equality operator.
+  bool equals(const gtsam::NonlinearFactor& expected,
+              double tolerance) const override;
+
+  // Returns the measured moving baseline.
+  inline const Eigen::Vector3d& measured() const { return I_t_PA_measured_; }
+
+  // Factory method.
+  inline static shared_ptr Create(
+      gtsam::Key T_I_B_key, const Eigen::Vector3d& I_t_PA_measured,
+      const Eigen::Vector3d& B_t_PA,
+      const gtsam::noiseModel::Base::shared_ptr& noise_model) {
+    return shared_ptr(new MovingBaselineFactor1(T_I_B_key, I_t_PA_measured,
+                                                B_t_PA, noise_model));
+  }
+
+ protected:
+  // Moving baseline measurement in inertial frame coordinates.
+  const Eigen::Vector3d I_t_PA_measured_;
+  // Extrinsic calibration from reference receiver antenna to attitude receiver
+  // antenna in base frame.
+  const Eigen::Vector3d B_t_PA_;
+
+ private:
+  typedef gtsam::NoiseModelFactor1<gtsam::Pose3> Base;
+  typedef MovingBaselineFactor1 This;
+};
+
+// Moving baseline factor that determines the error and Jacobian w.r.t. to the
+// vector between two GNSS antennas in inertial frame. Additionally estimates
+// position antenna calibrations.
+class MovingBaselineFactor2
     : public gtsam::NoiseModelFactor3<gtsam::Pose3, gtsam::Point3,
                                       gtsam::Point3> {
  public:
-  MovingBaselineFactor(gtsam::Key T_I_B_key, gtsam::Key B_t_P_key,
-                       gtsam::Key B_t_A_key,
-                       const Eigen::Vector3d& I_t_PA_measured,
-                       const gtsam::noiseModel::Base::shared_ptr& noise_model);
+  MovingBaselineFactor2(gtsam::Key T_I_B_key, gtsam::Key B_t_P_key,
+                        gtsam::Key B_t_A_key,
+                        const Eigen::Vector3d& I_t_PA_measured,
+                        const gtsam::noiseModel::Base::shared_ptr& noise_model);
 
   // Evaluates the error term and corresponding jacobians w.r.t. the pose.
   gtsam::Vector evaluateError(
@@ -37,7 +90,9 @@ class MovingBaselineFactor
       boost::optional<gtsam::Matrix&> D_Tt_tA = boost::none) const override;
 
   // Returns a deep copy of the factor.
-  gtsam::NonlinearFactor::shared_ptr clone() const override;
+  inline gtsam::NonlinearFactor::shared_ptr clone() const override {
+    return gtsam::NonlinearFactor::shared_ptr(new This(*this));
+  }
 
   // Prints out information about the factor.
   void print(const std::string& s,
@@ -56,8 +111,8 @@ class MovingBaselineFactor
       gtsam::Key T_I_B_key, gtsam::Key B_t_P_key, gtsam::Key B_t_A_key,
       const Eigen::Vector3d& I_t_PA_measured,
       const gtsam::noiseModel::Base::shared_ptr& noise_model) {
-    return shared_ptr(new MovingBaselineFactor(T_I_B_key, B_t_P_key, B_t_A_key,
-                                               I_t_PA_measured, noise_model));
+    return shared_ptr(new MovingBaselineFactor2(T_I_B_key, B_t_P_key, B_t_A_key,
+                                                I_t_PA_measured, noise_model));
   }
 
  protected:
@@ -67,7 +122,7 @@ class MovingBaselineFactor
  private:
   typedef gtsam::NoiseModelFactor3<gtsam::Pose3, gtsam::Point3, gtsam::Point3>
       Base;
-  typedef MovingBaselineFactor This;
+  typedef MovingBaselineFactor2 This;
 };
 
 }  // namespace mav_state_estimation

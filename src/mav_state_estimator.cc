@@ -341,6 +341,7 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     ROS_ERROR("Cannot handle IMU message.");
   }
   prev_imu_ = imu_msg;
+  batch_imu_.push_back(imu_msg);
 }
 
 void MavStateEstimator::posCallback(
@@ -626,7 +627,50 @@ void MavStateEstimator::solveThreaded(
   publishAntennaPosition(B_t_P, *time, position_antenna_pub_);
   publishAntennaPosition(B_t_A, *time, attitude_antenna_pub_);
 
+  // Update batch graph.
+  // TODO(rikba): Maybe filter out prior factors.
+  batch_graph_.push_back(graph->begin(), graph->end());
+  batch_values_.insert(X(i), pose);
+  batch_values_.insert(V(i), velocity);
+  batch_values_.insert(B(i), bias);
+  if (estimate_antenna_positions_) {
+    batch_values_.insert(P(i), B_t_P);
+    batch_values_.insert(A(i), B_t_A);
+  }
+
   is_solving_.store(false);
+}
+
+void MavStateEstimator::solveBatch() {
+  ROS_INFO("Solving batch with %lu factors and %lu values.",
+           batch_graph_.size(), batch_values_.size());
+  gtsam::LevenbergMarquardtOptimizer optimizer(batch_graph_, batch_values_);
+  auto result = optimizer.optimize();
+
+  gtsam::PreintegratedCombinedMeasurements integrator;
+  uint64_t idx = 0;
+  auto prev_imu = batch_imu_.front();
+  gtsam::NavState prev_state(result.at<gtsam::Pose3>(X(idx)),
+                             result.at<gtsam::Velocity3>(V(idx)));
+  auto prev_bias = result.at<gtsam::imuBias::ConstantBias>(B(idx));
+  for (auto imu = batch_imu_.begin() + 1; imu != batch_imu_.end(); ++imu) {
+    auto prev_imu = *std::prev(imu);
+    Eigen::Vector3d lin_acc, ang_vel;
+    tf::vectorMsgToEigen(prev_imu->linear_acceleration, lin_acc);
+    tf::vectorMsgToEigen(prev_imu->angular_velocity, ang_vel);
+    auto dt = ((*imu)->header.stamp - prev_imu->header.stamp).toSec();
+    integrator.integrateMeasurement(lin_acc, ang_vel, dt);
+    auto imu_state = integrator_.predict(prev_state, prev_bias);
+
+    // Update solution index.
+    if ((*imu)->header.stamp >= idx_to_stamp_[idx + 1]) {
+      idx++;
+      prev_state = gtsam::NavState(result.at<gtsam::Pose3>(X(idx)),
+                                   result.at<gtsam::Velocity3>(V(idx)));
+      prev_bias = result.at<gtsam::imuBias::ConstantBias>(B(idx));
+      integrator.resetIntegrationAndSetBias(prev_bias);
+    }
+  }
 }
 
 }  // namespace mav_state_estimation

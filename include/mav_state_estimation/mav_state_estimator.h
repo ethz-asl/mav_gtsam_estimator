@@ -113,6 +113,15 @@ class MavStateEstimator {
   gtsam::NavState prev_state_;
   gtsam::imuBias::ConstantBias prev_bias_;
 
+  // Batch
+  gtsam::NonlinearFactorGraph batch_graph_;
+  gtsam::Values batch_values_;
+  std::vector<sensor_msgs::Imu::ConstPtr> batch_imu_;
+  void solveBatch();
+  ros::Publisher batch_pub_;
+  ros::Publisher batch_acc_bias_pub_;
+  ros::Publisher batch_gyro_bias_pub_;
+
   // Extra thread to solve factor graph.
   std::thread solver_thread_;
   std::atomic_bool is_solving_ = false;

@@ -16,6 +16,7 @@
 #include <piksi_rtk_msgs/PositionWithCovarianceStamped.h>
 #include <ros/ros.h>
 #include <sensor_msgs/Imu.h>
+#include <std_srvs/Empty.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <Eigen/Dense>
 
@@ -44,7 +45,8 @@ class MavStateEstimator {
   void publishPose(const gtsam::NavState& state, const ros::Time& stamp,
                    const ros::Publisher& pub) const;
   void publishBias(const gtsam::imuBias::ConstantBias& bias,
-                   const ros::Time& stamp) const;
+                   const ros::Time& stamp, const ros::Publisher& acc_bias_pub,
+                   const ros::Publisher& gyro_bias_pub) const;
   void publishAntennaPosition(const gtsam::Point3& B_t, const ros::Time& stamp,
                               const ros::Publisher& pub) const;
 
@@ -74,6 +76,8 @@ class MavStateEstimator {
   ros::Publisher gyro_bias_pub_;
   ros::Publisher position_antenna_pub_;
   ros::Publisher attitude_antenna_pub_;
+
+  ros::ServiceServer batch_srv_;
 
   tf2_ros::TransformBroadcaster tfb_;
 
@@ -114,13 +118,23 @@ class MavStateEstimator {
   gtsam::imuBias::ConstantBias prev_bias_;
 
   // Batch
+  std::mutex batch_mtx_;
   gtsam::NonlinearFactorGraph batch_graph_;
   gtsam::Values batch_values_;
   std::vector<sensor_msgs::Imu::ConstPtr> batch_imu_;
-  void solveBatch();
+  void solveBatch(
+      std::unique_ptr<gtsam::NonlinearFactorGraph> graph,
+      std::unique_ptr<gtsam::Values> values,
+      std::unique_ptr<std::vector<sensor_msgs::Imu::ConstPtr>> imus,
+      std::unique_ptr<gtsam::PreintegratedCombinedMeasurements> integrator,
+      std::unique_ptr<std::map<uint64_t, ros::Time>> idx_to_stamp);
+  bool computeBatchSolution(std_srvs::Empty::Request& request,
+                            std_srvs::Empty::Response& response);
   ros::Publisher batch_pub_;
   ros::Publisher batch_acc_bias_pub_;
   ros::Publisher batch_gyro_bias_pub_;
+  std::thread batch_thread_;
+  std::atomic_bool batch_running_ = false;
 
   // Extra thread to solve factor graph.
   std::thread solver_thread_;
@@ -131,7 +145,7 @@ class MavStateEstimator {
 
   void solveThreaded(std::unique_ptr<gtsam::NonlinearFactorGraph> graph,
                      std::unique_ptr<gtsam::Values> values,
-                     std::unique_ptr<ros::Time> time, uint64_t i);
+                     std::unique_ptr<ros::Time> time, const uint64_t i);
 };
 
 }  // namespace mav_state_estimation

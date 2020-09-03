@@ -148,14 +148,23 @@ MavStateEstimator::MavStateEstimator()
       "prediction", kQueueSize);
   optimization_pub_ = nh_private_.advertise<geometry_msgs::PoseStamped>(
       "optimization", kQueueSize);
+  batch_pub_ =
+      nh_private_.advertise<geometry_msgs::PoseStamped>("batch", kQueueSize);
   acc_bias_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
       "acc_bias", kQueueSize);
   gyro_bias_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
       "gyro_bias", kQueueSize);
+  batch_acc_bias_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
+      "batch_acc_bias", kQueueSize);
+  batch_gyro_bias_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
+      "batch_gyro_bias", kQueueSize);
   position_antenna_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
       "position_antenna", kQueueSize);
   attitude_antenna_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
       "attitude_antenna", kQueueSize);
+
+  batch_srv_ = nh_private_.advertiseService(
+      "compute_batch_solution", &MavStateEstimator::computeBatchSolution, this);
 }
 
 void MavStateEstimator::loadGnssParams(
@@ -496,7 +505,9 @@ void MavStateEstimator::publishAntennaPosition(
 }
 
 void MavStateEstimator::publishBias(const gtsam::imuBias::ConstantBias& bias,
-                                    const ros::Time& stamp) const {
+                                    const ros::Time& stamp,
+                                    const ros::Publisher& acc_bias_pub,
+                                    const ros::Publisher& gyro_bias_pub) const {
   geometry_msgs::Vector3Stamped acc_bias, gyro_bias;
   acc_bias.header.stamp = stamp;
   gyro_bias.header.stamp = stamp;
@@ -504,12 +515,13 @@ void MavStateEstimator::publishBias(const gtsam::imuBias::ConstantBias& bias,
   tf::vectorEigenToMsg(bias.accelerometer(), acc_bias.vector);
   tf::vectorEigenToMsg(bias.gyroscope(), gyro_bias.vector);
 
-  acc_bias_pub_.publish(acc_bias);
-  gyro_bias_pub_.publish(gyro_bias);
+  acc_bias_pub.publish(acc_bias);
+  gyro_bias_pub.publish(gyro_bias);
 }
 
 MavStateEstimator::~MavStateEstimator() {
   if (solver_thread_.joinable()) solver_thread_.join();
+  if (batch_thread_.joinable()) batch_thread_.join();
 }
 
 void MavStateEstimator::solve() {
@@ -550,7 +562,7 @@ void MavStateEstimator::solve() {
 void MavStateEstimator::solveThreaded(
     std::unique_ptr<gtsam::NonlinearFactorGraph> graph,
     std::unique_ptr<gtsam::Values> values, std::unique_ptr<ros::Time> time,
-    uint64_t i) {
+    const uint64_t i) {
   assert(graph);
   assert(values);
   assert(time);
@@ -593,22 +605,22 @@ void MavStateEstimator::solveThreaded(
       B_t_A_ = B_t_A;
     }
 
+    auto idx = i;
     for (auto it = new_graph_.begin(); it != new_graph_.end(); ++it) {
       auto imu = boost::dynamic_pointer_cast<gtsam::CombinedImuFactor>(*it);
       if (imu) {
         prev_state_ =
             imu->preintegratedMeasurements().predict(prev_state_, prev_bias_);
-        new_values_.update(X(i + 1), prev_state_.pose());
-        new_values_.update(V(i + 1), prev_state_.velocity());
-        new_values_.update(B(i + 1), prev_bias_);
+        new_values_.update(X(idx + 1), prev_state_.pose());
+        new_values_.update(V(idx + 1), prev_state_.velocity());
+        new_values_.update(B(idx + 1), prev_bias_);
         if (estimate_antenna_positions_) {
-          new_values_.update(P(i + 1), B_t_P_);
-          new_values_.update(A(i + 1), B_t_A_);
+          new_values_.update(P(idx + 1), B_t_P_);
+          new_values_.update(A(idx + 1), B_t_A_);
         }
-        i++;
+        idx++;
       }
     }
-    assert(idx_ == i);
   }
 
   // ROS publishers
@@ -623,54 +635,126 @@ void MavStateEstimator::solveThreaded(
 
   broadcastTf(new_state, *time, base_frame_ + "_optimization");
   publishPose(new_state, *time, optimization_pub_);
-  publishBias(bias, *time);
+  publishBias(bias, *time, acc_bias_pub_, gyro_bias_pub_);
   publishAntennaPosition(B_t_P, *time, position_antenna_pub_);
   publishAntennaPosition(B_t_A, *time, attitude_antenna_pub_);
 
   // Update batch graph.
   // TODO(rikba): Maybe filter out prior factors.
-  batch_graph_.push_back(graph->begin(), graph->end());
-  batch_values_.insert(X(i), pose);
-  batch_values_.insert(V(i), velocity);
-  batch_values_.insert(B(i), bias);
-  if (estimate_antenna_positions_) {
-    batch_values_.insert(P(i), B_t_P);
-    batch_values_.insert(A(i), B_t_A);
+  {
+    std::unique_lock<std::mutex> lock(batch_mtx_);
+    batch_graph_.push_back(graph->begin(), graph->end());
+    batch_values_.insert(*values);
+    batch_values_.update(X(i), pose);
+    batch_values_.update(V(i), velocity);
+    batch_values_.update(B(i), bias);
+    if (estimate_antenna_positions_) {
+      batch_values_.update(P(i), B_t_P);
+      batch_values_.update(A(i), B_t_A);
+    }
   }
 
   is_solving_.store(false);
 }
 
-void MavStateEstimator::solveBatch() {
-  ROS_INFO("Solving batch with %lu factors and %lu values.",
-           batch_graph_.size(), batch_values_.size());
-  gtsam::LevenbergMarquardtOptimizer optimizer(batch_graph_, batch_values_);
-  auto result = optimizer.optimize();
+bool MavStateEstimator::computeBatchSolution(
+    std_srvs::Empty::Request& request, std_srvs::Empty::Response& response) {
+  auto already_running = batch_running_.load();
+  if (!already_running) {
+    batch_running_.store(true);
+    // Create deep copies of current graph and initial values.
+    {
+      std::unique_lock<std::mutex> lock(batch_mtx_);
 
-  gtsam::PreintegratedCombinedMeasurements integrator;
-  uint64_t idx = 0;
-  auto prev_imu = batch_imu_.front();
-  gtsam::NavState prev_state(result.at<gtsam::Pose3>(X(idx)),
-                             result.at<gtsam::Velocity3>(V(idx)));
-  auto prev_bias = result.at<gtsam::imuBias::ConstantBias>(B(idx));
-  for (auto imu = batch_imu_.begin() + 1; imu != batch_imu_.end(); ++imu) {
-    auto prev_imu = *std::prev(imu);
-    Eigen::Vector3d lin_acc, ang_vel;
-    tf::vectorMsgToEigen(prev_imu->linear_acceleration, lin_acc);
-    tf::vectorMsgToEigen(prev_imu->angular_velocity, ang_vel);
-    auto dt = ((*imu)->header.stamp - prev_imu->header.stamp).toSec();
-    integrator.integrateMeasurement(lin_acc, ang_vel, dt);
-    auto imu_state = integrator_.predict(prev_state, prev_bias);
+      auto graph = std::make_unique<gtsam::NonlinearFactorGraph>(batch_graph_);
+      auto values = std::make_unique<gtsam::Values>(batch_values_);
+      auto imus =
+          std::make_unique<std::vector<sensor_msgs::Imu::ConstPtr>>(batch_imu_);
+      auto integrator =
+          std::make_unique<gtsam::PreintegratedCombinedMeasurements>(
+              integrator_);
+      auto idx_to_stamp =
+          std::make_unique<std::map<uint64_t, ros::Time>>(idx_to_stamp_);
 
-    // Update solution index.
-    if ((*imu)->header.stamp >= idx_to_stamp_[idx + 1]) {
-      idx++;
-      prev_state = gtsam::NavState(result.at<gtsam::Pose3>(X(idx)),
-                                   result.at<gtsam::Velocity3>(V(idx)));
-      prev_bias = result.at<gtsam::imuBias::ConstantBias>(B(idx));
-      integrator.resetIntegrationAndSetBias(prev_bias);
+      if (batch_thread_.joinable()) batch_thread_.join();
+      batch_thread_ =
+          std::thread(&MavStateEstimator::solveBatch, this, std::move(graph),
+                      std::move(values), std::move(imus), std::move(integrator),
+                      std::move(idx_to_stamp));
     }
   }
+
+  return !already_running;
+}
+
+void MavStateEstimator::solveBatch(
+    std::unique_ptr<gtsam::NonlinearFactorGraph> graph,
+    std::unique_ptr<gtsam::Values> values,
+    std::unique_ptr<std::vector<sensor_msgs::Imu::ConstPtr>> imus,
+    std::unique_ptr<gtsam::PreintegratedCombinedMeasurements> integrator,
+    std::unique_ptr<std::map<uint64_t, ros::Time>> idx_to_stamp) {
+  assert(graph);
+  assert(values);
+  assert(imu);
+  assert(integrator);
+  assert(idx_to_stamp);
+  ROS_INFO("Solving batch with %lu factors and %lu values.", graph->size(),
+           values->size());
+
+  gtsam::LevenbergMarquardtOptimizer optimizer(*graph, *values);
+  auto result = optimizer.optimize();
+
+  try {
+    uint64_t idx = 0;
+    auto start = idx_to_stamp->at(0);
+    auto prev_imu = std::find_if(imus->begin(), imus->end(),
+                                 [&start](const sensor_msgs::Imu::ConstPtr& x) {
+                                   return x->header.stamp == start;
+                                 });
+    if (prev_imu == imus->end()) {
+      ROS_ERROR("Cannot not find start IMU message.");
+    } else {
+      gtsam::NavState prev_state(result.at<gtsam::Pose3>(X(idx)),
+                                 result.at<gtsam::Velocity3>(V(idx)));
+      auto prev_bias = result.at<gtsam::imuBias::ConstantBias>(B(idx));
+      integrator->resetIntegrationAndSetBias(prev_bias);
+      for (; prev_imu != std::prev(imus->end()); ++prev_imu) {
+        auto imu = std::next(prev_imu);
+        Eigen::Vector3d lin_acc, ang_vel;
+        tf::vectorMsgToEigen((*prev_imu)->linear_acceleration, lin_acc);
+        tf::vectorMsgToEigen((*prev_imu)->angular_velocity, ang_vel);
+        auto dt = ((*imu)->header.stamp - (*prev_imu)->header.stamp).toSec();
+        integrator->integrateMeasurement(lin_acc, ang_vel, dt);
+        auto imu_state = integrator->predict(prev_state, prev_bias);
+        publishPose(imu_state, (*imu)->header.stamp, batch_pub_);
+
+        // Update solution index.
+        if ((*imu)->header.stamp == idx_to_stamp->at(idx + 1)) {
+          idx++;
+          try {
+            prev_state = gtsam::NavState(result.at<gtsam::Pose3>(X(idx)),
+                                         result.at<gtsam::Velocity3>(V(idx)));
+            prev_bias = result.at<gtsam::imuBias::ConstantBias>(B(idx));
+            integrator->resetIntegrationAndSetBias(prev_bias);
+            publishBias(prev_bias, (*imu)->header.stamp, batch_acc_bias_pub_,
+                        batch_gyro_bias_pub_);
+          } catch (const gtsam::ValuesKeyDoesNotExist& e) {
+            ROS_WARN_STREAM("Missing value at index: "
+                            << idx << ", stamp: " << idx_to_stamp->at(idx)
+                            << " error: " << e.what());
+          }
+        } else if ((*imu)->header.stamp > idx_to_stamp->at(idx + 1)) {
+          ROS_ERROR("Cannot find unary IMU message.");
+          break;
+        }
+      }
+      ROS_INFO_STREAM("Solved batch solution from "
+                      << start << " to " << (*prev_imu)->header.stamp);
+    }
+  } catch (const std::out_of_range& e) {
+    ROS_ERROR("Unary index out of range: %s", e.what());
+  }
+  batch_running_.store(false);
 }
 
 }  // namespace mav_state_estimation

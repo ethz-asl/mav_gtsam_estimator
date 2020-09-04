@@ -148,16 +148,10 @@ MavStateEstimator::MavStateEstimator()
       "prediction", kQueueSize);
   optimization_pub_ = nh_private_.advertise<geometry_msgs::PoseStamped>(
       "optimization", kQueueSize);
-  batch_pub_ =
-      nh_private_.advertise<geometry_msgs::PoseStamped>("batch", kQueueSize);
   acc_bias_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
       "acc_bias", kQueueSize);
   gyro_bias_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
       "gyro_bias", kQueueSize);
-  batch_acc_bias_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
-      "batch_acc_bias", kQueueSize);
-  batch_gyro_bias_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
-      "batch_gyro_bias", kQueueSize);
   position_antenna_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
       "position_antenna", kQueueSize);
   attitude_antenna_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
@@ -701,6 +695,17 @@ void MavStateEstimator::solveBatch(
   ROS_INFO("Solving batch with %lu factors and %lu values.", graph->size(),
            values->size());
 
+  const uint32_t kQueueSize = 1800000;
+  auto batch_acc_bias_pub =
+      nh_private_.advertise<geometry_msgs::Vector3Stamped>("batch_acc_bias",
+                                                           kQueueSize);
+  auto batch_gyro_bias_pub =
+      nh_private_.advertise<geometry_msgs::Vector3Stamped>("batch_gyro_bias",
+                                                           kQueueSize);
+  auto batch_pub =
+      nh_private_.advertise<geometry_msgs::PoseStamped>("batch", kQueueSize);
+  ros::spinOnce();
+
   gtsam::LevenbergMarquardtOptimizer optimizer(*graph, *values);
   auto result = optimizer.optimize();
 
@@ -726,7 +731,8 @@ void MavStateEstimator::solveBatch(
         auto dt = ((*imu)->header.stamp - (*prev_imu)->header.stamp).toSec();
         integrator->integrateMeasurement(lin_acc, ang_vel, dt);
         auto imu_state = integrator->predict(prev_state, prev_bias);
-        publishPose(imu_state, (*imu)->header.stamp, batch_pub_);
+        publishPose(imu_state, (*imu)->header.stamp, batch_pub);
+        ros::spinOnce();
 
         // Update solution index.
         if ((*imu)->header.stamp == idx_to_stamp->at(idx + 1)) {
@@ -736,8 +742,8 @@ void MavStateEstimator::solveBatch(
                                          result.at<gtsam::Velocity3>(V(idx)));
             prev_bias = result.at<gtsam::imuBias::ConstantBias>(B(idx));
             integrator->resetIntegrationAndSetBias(prev_bias);
-            publishBias(prev_bias, (*imu)->header.stamp, batch_acc_bias_pub_,
-                        batch_gyro_bias_pub_);
+            publishBias(prev_bias, (*imu)->header.stamp, batch_acc_bias_pub,
+                        batch_gyro_bias_pub);
           } catch (const gtsam::ValuesKeyDoesNotExist& e) {
             ROS_WARN_STREAM("Missing value at index: "
                             << idx << ", stamp: " << idx_to_stamp->at(idx)

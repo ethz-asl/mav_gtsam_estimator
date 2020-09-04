@@ -7,7 +7,7 @@
 
   <group ns="$(arg mav_name)">
     <!-- Start rosbag -->
-    <node pkg="rosbag" type="play" name="rosbag_play" output="screen" args="-q -r 1 --clock $(arg bag_base).bag" required="true"/>
+    <node pkg="rosbag" type="play" name="rosbag_play" output="screen" args="-q -r 1 --clock $(arg bag_base).bag" required="false"/>
 
     <!-- Estimator -->
     <node name="mav_state_estimator" pkg="mav_state_estimation" type="mav_state_estimator" clear_params="true" output="screen">
@@ -28,11 +28,15 @@
         type="record"
         name="record"
         output="screen"
-        args="--output-prefix=$(arg bag_base)_estimator
+        args="--buffsize=0
+        --output-prefix=$(arg bag_base)_estimator
         /$(arg mav_name)/mav_state_estimator/optimization
         /$(arg mav_name)/mav_state_estimator/prediction
+        /$(arg mav_name)/mav_state_estimator/batch
         /$(arg mav_name)/mav_state_estimator/acc_bias
         /$(arg mav_name)/mav_state_estimator/gyro_bias
+        /$(arg mav_name)/mav_state_estimator/batch_acc_bias
+        /$(arg mav_name)/mav_state_estimator/batch_gyro_bias
         /$(arg mav_name)/mav_state_estimator/position_antenna
         /$(arg mav_name)/mav_state_estimator/attitude_antenna
         /$(arg mav_name)/piksi/attitude_receiver_0/ros/baseline_ned"/>

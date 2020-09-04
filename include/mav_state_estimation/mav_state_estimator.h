@@ -130,9 +130,6 @@ class MavStateEstimator {
       std::unique_ptr<std::map<uint64_t, ros::Time>> idx_to_stamp);
   bool computeBatchSolution(std_srvs::Empty::Request& request,
                             std_srvs::Empty::Response& response);
-  ros::Publisher batch_pub_;
-  ros::Publisher batch_acc_bias_pub_;
-  ros::Publisher batch_gyro_bias_pub_;
   std::thread batch_thread_;
   std::atomic_bool batch_running_ = false;
 

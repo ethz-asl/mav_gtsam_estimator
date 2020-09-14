@@ -116,6 +116,7 @@ class MavStateEstimator {
       new_unary_factors_;
   gtsam::NavState prev_state_;
   gtsam::imuBias::ConstantBias prev_bias_;
+  int max_relinearization_window_ = -1;
 
   // Batch
   std::mutex batch_mtx_;

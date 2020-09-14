@@ -127,7 +127,12 @@ MavStateEstimator::MavStateEstimator()
   parameters.relinearizeThreshold = thresholds;
   // parameters.optimizationParams = gtsam::ISAM2DoglegParams();
   nh_private_.getParam("isam2/relinearize_skip", parameters.relinearizeSkip);
+  nh_private_.getParam("isam2/enable_partial_relinarization_check",
+                       parameters.enablePartialRelinearizationCheck);
   isam2_ = gtsam::ISAM2(parameters);
+
+  nh_private_.getParam("isam2/max_relinearization_window",
+                       max_relinearization_window_);
 
   // Subscribe to topics.
   const uint32_t kQueueSize = 1000;
@@ -563,7 +568,19 @@ void MavStateEstimator::solveThreaded(
 
   // Solve iterative problem.
   gttic_(solveThreaded);
-  isam2_.update(*graph, *values);
+  // Relinearization window
+  gtsam::FastList<gtsam::Key> no_relin_keys;
+  if (max_relinearization_window_ > 0 &&
+      static_cast<int>(isam2_.getFactorsUnsafe().keyVector().size()) >
+          max_relinearization_window_) {
+    auto key_vector = isam2_.getFactorsUnsafe().keyVector();
+    no_relin_keys = gtsam::FastList<gtsam::Key>(
+        key_vector.begin(),
+        std::prev(key_vector.end(), max_relinearization_window_));
+  }
+
+  auto result = isam2_.update(*graph, *values, gtsam::FactorIndices(),
+                              boost::none, no_relin_keys);
   auto pose = isam2_.calculateEstimate<gtsam::Pose3>(X(i));
   auto velocity = isam2_.calculateEstimate<gtsam::Velocity3>(V(i));
   auto bias = isam2_.calculateEstimate<gtsam::imuBias::ConstantBias>(B(i));
@@ -575,17 +592,6 @@ void MavStateEstimator::solveThreaded(
   }
   gttoc_(solveThreaded);
   gtsam::tictoc_finishedIteration_();
-
-  // Print.
-  // static uint32_t iteration = 0;
-  // char buffer[50];
-  // sprintf(buffer, "/tmp/graph_%04d.dot", iteration);
-  // std::ofstream os(buffer);
-  // ROS_INFO_STREAM("Storing graph " << iteration);
-  // isam2_.getFactorsUnsafe().saveGraph(os, isam2_.getLinearizationPoint());
-  // ROS_INFO_STREAM("Storing bayes " << iteration);
-  // sprintf(buffer, "/tmp/bayes_%04d.dot", iteration++);
-  // isam2_.saveGraph(buffer);
 
   // Update new values (threadsafe, blocks all sensor callbacks).
   gtsam::NavState new_state(pose, velocity);
@@ -647,6 +653,19 @@ void MavStateEstimator::solveThreaded(
       batch_values_.update(A(i), B_t_A);
     }
   }
+
+  // Print.
+  // static uint32_t iteration = 0;
+  // char buffer[50];
+  // sprintf(buffer, "/tmp/graph_%04d.dot", iteration);
+  // std::ofstream os(buffer);
+  // ROS_INFO_STREAM("Storing graph " << iteration);
+  // isam2_.getFactorsUnsafe().saveGraph(os, isam2_.getLinearizationPoint());
+  // ROS_INFO_STREAM("Storing bayes " << iteration);
+  // sprintf(buffer, "/tmp/bayes_%04d.dot", iteration++);
+  // isam2_.saveGraph(buffer);
+  ROS_INFO_STREAM("Computation time " << timing_msg_.iteration);
+  ROS_INFO_STREAM("Num relinearized " << result.getVariablesRelinearized());
 
   is_solving_.store(false);
 }

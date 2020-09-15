@@ -569,18 +569,23 @@ void MavStateEstimator::solveThreaded(
   // Solve iterative problem.
   gttic_(solveThreaded);
   // Relinearization window
-  gtsam::FastList<gtsam::Key> no_relin_keys;
   if (max_relinearization_window_ > 0 &&
-      static_cast<int>(isam2_.getFactorsUnsafe().keyVector().size()) >
-          max_relinearization_window_) {
-    auto key_vector = isam2_.getFactorsUnsafe().keyVector();
-    no_relin_keys = gtsam::FastList<gtsam::Key>(
-        key_vector.begin(),
-        std::prev(key_vector.end(), max_relinearization_window_));
+      i >= static_cast<uint64_t>(max_relinearization_window_)) {
+    for (auto j = next_norelin_idx_; j <= (i - max_relinearization_window_);
+         ++j) {
+      no_relin_keys_.push_back(X(j));
+      no_relin_keys_.push_back(V(j));
+      no_relin_keys_.push_back(B(j));
+      if (estimate_antenna_positions_) {
+        no_relin_keys_.push_back(P(j));
+        no_relin_keys_.push_back(A(j));
+      }
+    }
+    next_norelin_idx_ = i - max_relinearization_window_ + 1;
   }
 
   auto result = isam2_.update(*graph, *values, gtsam::FactorIndices(),
-                              boost::none, no_relin_keys);
+                              boost::none, no_relin_keys_);
   auto pose = isam2_.calculateEstimate<gtsam::Pose3>(X(i));
   auto velocity = isam2_.calculateEstimate<gtsam::Velocity3>(V(i));
   auto bias = isam2_.calculateEstimate<gtsam::imuBias::ConstantBias>(B(i));
@@ -664,8 +669,8 @@ void MavStateEstimator::solveThreaded(
   // ROS_INFO_STREAM("Storing bayes " << iteration);
   // sprintf(buffer, "/tmp/bayes_%04d.dot", iteration++);
   // isam2_.saveGraph(buffer);
-  ROS_INFO_STREAM("Computation time " << timing_msg_.iteration);
-  ROS_INFO_STREAM("Num relinearized " << result.getVariablesRelinearized());
+  // ROS_INFO_STREAM("Computation time " << timing_msg_.iteration);
+  // ROS_INFO_STREAM("Num relinearized " << result.getVariablesRelinearized());
 
   is_solving_.store(false);
 }

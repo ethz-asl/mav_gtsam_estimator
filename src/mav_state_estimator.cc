@@ -131,8 +131,7 @@ MavStateEstimator::MavStateEstimator()
                        parameters.enablePartialRelinearizationCheck);
   isam2_ = gtsam::ISAM2(parameters);
 
-  nh_private_.getParam("isam2/max_relinearization_window",
-                       max_relinearization_window_);
+  nh_private_.getParam("isam2/max_window", max_window_);
 
   // Subscribe to topics.
   const uint32_t kQueueSize = 1000;
@@ -568,24 +567,30 @@ void MavStateEstimator::solveThreaded(
 
   // Solve iterative problem.
   gttic_(solveThreaded);
-  // Relinearization window
-  if (max_relinearization_window_ > 0 &&
-      i >= static_cast<uint64_t>(max_relinearization_window_)) {
-    for (auto j = next_norelin_idx_; j <= (i - max_relinearization_window_);
-         ++j) {
-      no_relin_keys_.push_back(X(j));
-      no_relin_keys_.push_back(V(j));
-      no_relin_keys_.push_back(B(j));
+  // Marginalization window
+  gtsam::FastList<gtsam::Key> window;
+  if (max_window_ > 0 && i >= static_cast<uint64_t>(max_window_)) {
+    for (auto j = next_elim_idx_; j <= (i - max_window_); ++j) {
+      window.push_back(X(j));
+      window.push_back(V(j));
+      window.push_back(B(j));
       if (estimate_antenna_positions_) {
-        no_relin_keys_.push_back(P(j));
-        no_relin_keys_.push_back(A(j));
+        window.push_back(P(j));
+        window.push_back(A(j));
       }
     }
-    next_norelin_idx_ = i - max_relinearization_window_ + 1;
+    next_elim_idx_ = i - max_window_ + 1;
   }
 
   auto result = isam2_.update(*graph, *values, gtsam::FactorIndices(),
-                              boost::none, no_relin_keys_);
+                              boost::none, boost::none);
+  // TODO(rikba): WARNING this only works because of the simple graph structure
+  // in GNSS+IMU fusion. If we want to fuse more sensors, we have to apply the
+  // grouping and reordering according to
+  // https://github.com/borglab/gtsam/blob/5c9c4bed9306abe17cb3194fe729076605a5df24/gtsam_unstable/nonlinear/IncrementalFixedLagSmoother.cpp#L180
+  if (!window.empty()) {
+    isam2_.marginalizeLeaves(window);
+  }
   auto pose = isam2_.calculateEstimate<gtsam::Pose3>(X(i));
   auto velocity = isam2_.calculateEstimate<gtsam::Velocity3>(V(i));
   auto bias = isam2_.calculateEstimate<gtsam::imuBias::ConstantBias>(B(i));

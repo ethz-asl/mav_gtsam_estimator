@@ -7,7 +7,9 @@
 #include <gtsam/base/timing.h>
 #include <gtsam/inference/Symbol.h>
 #include <gtsam/slam/BetweenFactor.h>
+#include <nav_msgs/Odometry.h>
 #include <ros/ros.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 #include "mav_state_estimation/Timing.h"
 #include "mav_state_estimation/absolute_position_factor.h"
@@ -160,6 +162,8 @@ MavStateEstimator::MavStateEstimator()
       "position_antenna", kQueueSize);
   attitude_antenna_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
       "attitude_antenna", kQueueSize);
+  odometry_pub_ =
+      nh_private_.advertise<nav_msgs::Odometry>("odometry", kQueueSize);
 
   batch_srv_ = nh_private_.advertiseService(
       "compute_batch_solution", &MavStateEstimator::computeBatchSolution, this);
@@ -311,8 +315,11 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
 
     // Publish high rate IMU prediction.
     auto imu_state = integrator_.predict(prev_state_, prev_bias_);
-    broadcastTf(imu_state, imu_msg->header.stamp, base_frame_ + "_prediction");
+    geometry_msgs::TransformStamped T_IB;
+    broadcastTf(imu_state, imu_msg->header.stamp, base_frame_, &T_IB);
     publishPose(imu_state, imu_msg->header.stamp, prediction_pub_);
+    publishOdometry(imu_state, ang_vel, prev_bias_, imu_msg->header.stamp,
+                    T_IB);
 
     // Setup new inbetween IMU factor.
     if (addUnaryStamp(imu_msg->header.stamp)) {
@@ -469,16 +476,58 @@ void MavStateEstimator::baselineCallback(
 
 void MavStateEstimator::broadcastTf(const gtsam::NavState& state,
                                     const ros::Time& stamp,
-                                    const std::string& child_frame_id) {
-  geometry_msgs::TransformStamped tf;
-  tf.header.stamp = stamp;
-  tf.header.frame_id = inertial_frame_;
-  tf.child_frame_id = child_frame_id;
+                                    const std::string& child_frame_id,
+                                    geometry_msgs::TransformStamped* T_IB) {
+  assert(T_IB);
+  T_IB->header.stamp = stamp;
+  T_IB->header.frame_id = inertial_frame_;
+  T_IB->child_frame_id = child_frame_id;
 
-  tf::vectorEigenToMsg(state.position(), tf.transform.translation);
+  tf::vectorEigenToMsg(state.position(), T_IB->transform.translation);
   tf::quaternionEigenToMsg(state.attitude().toQuaternion(),
-                           tf.transform.rotation);
-  tfb_.sendTransform(tf);
+                           T_IB->transform.rotation);
+  tfb_.sendTransform(*T_IB);
+}
+
+void MavStateEstimator::broadcastTf(const gtsam::NavState& state,
+                                    const ros::Time& stamp,
+                                    const std::string& child_frame_id) {
+  geometry_msgs::TransformStamped T_IB;
+  broadcastTf(state, stamp, child_frame_id, &T_IB);
+}
+
+void MavStateEstimator::publishOdometry(
+    const gtsam::NavState& state, const Eigen::Vector3d& omega_B,
+    const gtsam::imuBias::ConstantBias& bias, const ros::Time& stamp,
+    const geometry_msgs::TransformStamped& T_IB) const {
+  nav_msgs::Odometry msg;
+  msg.header.stamp = stamp;
+  msg.header.frame_id = inertial_frame_;
+  msg.child_frame_id = base_frame_;
+  tf::pointEigenToMsg(state.position(), msg.pose.pose.position);
+  tf::quaternionEigenToMsg(state.attitude().toQuaternion(),
+                           msg.pose.pose.orientation);
+
+  geometry_msgs::Vector3Stamped v_I, v_B;
+  tf::vectorEigenToMsg(state.velocity(), v_I.vector);
+  v_I.header = msg.header;
+  assert(T_IB.header.stamp == stamp);
+  assert(T_IB.header.frame_id == inertial_frame_);
+  assert(T_IB.child_frame_id == base_frame_);
+
+  tf2::Stamped<tf2::Transform> tf2_T_IB;
+  tf2::fromMsg(T_IB, tf2_T_IB);
+  auto T_BI = T_IB;
+  T_BI.header.frame_id = T_IB.child_frame_id;
+  T_BI.child_frame_id = T_IB.header.frame_id;
+  T_BI.transform = tf2::toMsg(tf2_T_IB.inverse());
+  tf2::doTransform(v_I, v_B, T_BI);
+  msg.twist.twist.linear = v_B.vector;
+
+  auto omega_B_corrected = omega_B - bias.gyroscope();
+  tf::vectorEigenToMsg(omega_B_corrected, msg.twist.twist.angular);
+
+  odometry_pub_.publish(msg);
 }
 
 void MavStateEstimator::publishPose(const gtsam::NavState& state,

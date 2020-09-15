@@ -17,7 +17,9 @@
 #include <ros/ros.h>
 #include <sensor_msgs/Imu.h>
 #include <std_srvs/Empty.h>
+#include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_broadcaster.h>
+#include <tf2_ros/transform_listener.h>
 #include <Eigen/Dense>
 
 #include "mav_state_estimation/Timing.h"
@@ -42,8 +44,16 @@ class MavStateEstimator {
 
   void broadcastTf(const gtsam::NavState& state, const ros::Time& stamp,
                    const std::string& child_frame_id);
+  void broadcastTf(const gtsam::NavState& state, const ros::Time& stamp,
+                   const std::string& child_frame_id,
+                   geometry_msgs::TransformStamped* T_IB);
   void publishPose(const gtsam::NavState& state, const ros::Time& stamp,
                    const ros::Publisher& pub) const;
+  void publishOdometry(const gtsam::NavState& state,
+                       const Eigen::Vector3d& omega_B,
+                       const gtsam::imuBias::ConstantBias& bias,
+                       const ros::Time& stamp,
+                       const geometry_msgs::TransformStamped& T_IB) const;
   void publishBias(const gtsam::imuBias::ConstantBias& bias,
                    const ros::Time& stamp, const ros::Publisher& acc_bias_pub,
                    const ros::Publisher& gyro_bias_pub) const;
@@ -76,10 +86,13 @@ class MavStateEstimator {
   ros::Publisher gyro_bias_pub_;
   ros::Publisher position_antenna_pub_;
   ros::Publisher attitude_antenna_pub_;
+  ros::Publisher odometry_pub_;
 
   ros::ServiceServer batch_srv_;
 
   tf2_ros::TransformBroadcaster tfb_;
+  tf2_ros::Buffer tf_buffer_;
+  tf2_ros::TransformListener tfl_ = tf2_ros::TransformListener(tf_buffer_);
 
   // Initial parameters.
   Initialization init_;

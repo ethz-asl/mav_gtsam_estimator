@@ -5,6 +5,8 @@
 #include <mutex>
 #include <thread>
 
+#include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/Vector3Stamped.h>
 #include <gtsam/inference/Symbol.h>
 #include <gtsam/linear/NoiseModel.h>
 #include <gtsam/navigation/CombinedImuFactor.h>
@@ -22,6 +24,7 @@
 #include <tf2_ros/transform_listener.h>
 #include <Eigen/Dense>
 
+#include "mav_state_estimation/Batch.h"
 #include "mav_state_estimation/Timing.h"
 #include "mav_state_estimation/initialization.h"
 
@@ -49,6 +52,9 @@ class MavStateEstimator {
                    geometry_msgs::TransformStamped* T_IB);
   void publishPose(const gtsam::NavState& state, const ros::Time& stamp,
                    const ros::Publisher& pub) const;
+  void publishPose(const gtsam::NavState& state, const ros::Time& stamp,
+                   const ros::Publisher& pub,
+                   geometry_msgs::PoseStamped* pose) const;
   void publishOdometry(const gtsam::NavState& state,
                        const Eigen::Vector3d& omega_B,
                        const gtsam::imuBias::ConstantBias& bias,
@@ -57,6 +63,11 @@ class MavStateEstimator {
   void publishBias(const gtsam::imuBias::ConstantBias& bias,
                    const ros::Time& stamp, const ros::Publisher& acc_bias_pub,
                    const ros::Publisher& gyro_bias_pub) const;
+  void publishBias(const gtsam::imuBias::ConstantBias& bias,
+                   const ros::Time& stamp, const ros::Publisher& acc_bias_pub,
+                   const ros::Publisher& gyro_bias_pub,
+                   geometry_msgs::Vector3Stamped* acc_bias,
+                   geometry_msgs::Vector3Stamped* gyro_bias) const;
   void publishAntennaPosition(const gtsam::Point3& B_t, const ros::Time& stamp,
                               const ros::Publisher& pub) const;
 
@@ -143,9 +154,9 @@ class MavStateEstimator {
       std::unique_ptr<gtsam::Values> values,
       std::unique_ptr<std::vector<sensor_msgs::Imu::ConstPtr>> imus,
       std::unique_ptr<gtsam::PreintegratedCombinedMeasurements> integrator,
-      std::unique_ptr<std::map<uint64_t, ros::Time>> idx_to_stamp);
-  bool computeBatchSolution(std_srvs::Empty::Request& request,
-                            std_srvs::Empty::Response& response);
+      std::unique_ptr<std::map<uint64_t, ros::Time>> idx_to_stamp,
+      std::unique_ptr<std::string> bag_file);
+  bool computeBatchSolution(Batch::Request& request, Batch::Response& response);
   std::thread batch_thread_;
   std::atomic_bool batch_running_ = false;
 

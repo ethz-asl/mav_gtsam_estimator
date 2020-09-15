@@ -9,6 +9,7 @@
 #include <gtsam/slam/BetweenFactor.h>
 #include <nav_msgs/Odometry.h>
 #include <ros/ros.h>
+#include <rosbag/bag.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 #include "mav_state_estimation/Timing.h"
@@ -532,15 +533,23 @@ void MavStateEstimator::publishOdometry(
 
 void MavStateEstimator::publishPose(const gtsam::NavState& state,
                                     const ros::Time& stamp,
+                                    const ros::Publisher& pub,
+                                    geometry_msgs::PoseStamped* pose) const {
+  assert(pose);
+  pose->header.stamp = stamp;
+  pose->header.frame_id = inertial_frame_;
+
+  tf::pointEigenToMsg(state.position(), pose->pose.position);
+  tf::quaternionEigenToMsg(state.attitude().toQuaternion(),
+                           pose->pose.orientation);
+  pub.publish(*pose);
+}
+
+void MavStateEstimator::publishPose(const gtsam::NavState& state,
+                                    const ros::Time& stamp,
                                     const ros::Publisher& pub) const {
   geometry_msgs::PoseStamped pose;
-  pose.header.stamp = stamp;
-  pose.header.frame_id = inertial_frame_;
-
-  tf::pointEigenToMsg(state.position(), pose.pose.position);
-  tf::quaternionEigenToMsg(state.attitude().toQuaternion(),
-                           pose.pose.orientation);
-  pub.publish(pose);
+  publishPose(state, stamp, pub, &pose);
 }
 
 void MavStateEstimator::publishAntennaPosition(
@@ -553,19 +562,29 @@ void MavStateEstimator::publishAntennaPosition(
   pub.publish(antenna_position);
 }
 
+void MavStateEstimator::publishBias(
+    const gtsam::imuBias::ConstantBias& bias, const ros::Time& stamp,
+    const ros::Publisher& acc_bias_pub, const ros::Publisher& gyro_bias_pub,
+    geometry_msgs::Vector3Stamped* acc_bias,
+    geometry_msgs::Vector3Stamped* gyro_bias) const {
+  assert(acc_bias);
+  assert(gyro_bias);
+  acc_bias->header.stamp = stamp;
+  gyro_bias->header.stamp = stamp;
+
+  tf::vectorEigenToMsg(bias.accelerometer(), acc_bias->vector);
+  tf::vectorEigenToMsg(bias.gyroscope(), gyro_bias->vector);
+
+  acc_bias_pub.publish(*acc_bias);
+  gyro_bias_pub.publish(*gyro_bias);
+}
+
 void MavStateEstimator::publishBias(const gtsam::imuBias::ConstantBias& bias,
                                     const ros::Time& stamp,
                                     const ros::Publisher& acc_bias_pub,
                                     const ros::Publisher& gyro_bias_pub) const {
   geometry_msgs::Vector3Stamped acc_bias, gyro_bias;
-  acc_bias.header.stamp = stamp;
-  gyro_bias.header.stamp = stamp;
-
-  tf::vectorEigenToMsg(bias.accelerometer(), acc_bias.vector);
-  tf::vectorEigenToMsg(bias.gyroscope(), gyro_bias.vector);
-
-  acc_bias_pub.publish(acc_bias);
-  gyro_bias_pub.publish(gyro_bias);
+  publishBias(bias, stamp, acc_bias_pub, gyro_bias_pub, &acc_bias, &gyro_bias);
 }
 
 MavStateEstimator::~MavStateEstimator() {
@@ -731,8 +750,8 @@ void MavStateEstimator::solveThreaded(
   is_solving_.store(false);
 }
 
-bool MavStateEstimator::computeBatchSolution(
-    std_srvs::Empty::Request& request, std_srvs::Empty::Response& response) {
+bool MavStateEstimator::computeBatchSolution(Batch::Request& request,
+                                             Batch::Response& response) {
   auto already_running = batch_running_.load();
   if (!already_running) {
     batch_running_.store(true);
@@ -749,12 +768,13 @@ bool MavStateEstimator::computeBatchSolution(
               integrator_);
       auto idx_to_stamp =
           std::make_unique<std::map<uint64_t, ros::Time>>(idx_to_stamp_);
+      auto bag_file = std::make_unique<std::string>(request.bag_file);
 
       if (batch_thread_.joinable()) batch_thread_.join();
       batch_thread_ =
           std::thread(&MavStateEstimator::solveBatch, this, std::move(graph),
                       std::move(values), std::move(imus), std::move(integrator),
-                      std::move(idx_to_stamp));
+                      std::move(idx_to_stamp), std::move(bag_file));
     }
   }
 
@@ -766,24 +786,36 @@ void MavStateEstimator::solveBatch(
     std::unique_ptr<gtsam::Values> values,
     std::unique_ptr<std::vector<sensor_msgs::Imu::ConstPtr>> imus,
     std::unique_ptr<gtsam::PreintegratedCombinedMeasurements> integrator,
-    std::unique_ptr<std::map<uint64_t, ros::Time>> idx_to_stamp) {
+    std::unique_ptr<std::map<uint64_t, ros::Time>> idx_to_stamp,
+    std::unique_ptr<std::string> bag_file) {
   assert(graph);
   assert(values);
   assert(imu);
   assert(integrator);
   assert(idx_to_stamp);
+  assert(bag_file);
   ROS_INFO("Solving batch with %lu factors and %lu values.", graph->size(),
            values->size());
 
+  rosbag::Bag bag;
+  try {
+    bag.open(*bag_file, rosbag::bagmode::Write);
+  } catch (const rosbag::BagException& e) {
+    ROS_WARN("Cannot open bag file %s: %s", bag_file->c_str(), e.what());
+  }
+
   const uint32_t kQueueSize = 1800000;
+  const std::string kAccBiasTopic = "batch_acc_bias";
+  const std::string kGyroBiasTopic = "batch_gyro_bias";
+  const std::string kPoseTopic = "batch";
   auto batch_acc_bias_pub =
-      nh_private_.advertise<geometry_msgs::Vector3Stamped>("batch_acc_bias",
+      nh_private_.advertise<geometry_msgs::Vector3Stamped>(kAccBiasTopic,
                                                            kQueueSize);
   auto batch_gyro_bias_pub =
-      nh_private_.advertise<geometry_msgs::Vector3Stamped>("batch_gyro_bias",
+      nh_private_.advertise<geometry_msgs::Vector3Stamped>(kGyroBiasTopic,
                                                            kQueueSize);
   auto batch_pub =
-      nh_private_.advertise<geometry_msgs::PoseStamped>("batch", kQueueSize);
+      nh_private_.advertise<geometry_msgs::PoseStamped>(kPoseTopic, kQueueSize);
   ros::spinOnce();
 
   gtsam::LevenbergMarquardtOptimizer optimizer(*graph, *values);
@@ -811,8 +843,6 @@ void MavStateEstimator::solveBatch(
         auto dt = ((*imu)->header.stamp - (*prev_imu)->header.stamp).toSec();
         integrator->integrateMeasurement(lin_acc, ang_vel, dt);
         auto imu_state = integrator->predict(prev_state, prev_bias);
-        publishPose(imu_state, (*imu)->header.stamp, batch_pub);
-        ros::spinOnce();
 
         // Update solution index.
         if ((*imu)->header.stamp == idx_to_stamp->at(idx + 1)) {
@@ -820,10 +850,23 @@ void MavStateEstimator::solveBatch(
           try {
             prev_state = gtsam::NavState(result.at<gtsam::Pose3>(X(idx)),
                                          result.at<gtsam::Velocity3>(V(idx)));
+            imu_state = prev_state;
             prev_bias = result.at<gtsam::imuBias::ConstantBias>(B(idx));
             integrator->resetIntegrationAndSetBias(prev_bias);
+
+            geometry_msgs::Vector3Stamped acc_bias, gyro_bias;
             publishBias(prev_bias, (*imu)->header.stamp, batch_acc_bias_pub,
-                        batch_gyro_bias_pub);
+                        batch_gyro_bias_pub, &acc_bias, &gyro_bias);
+            try {
+              bag.write<geometry_msgs::Vector3Stamped>(
+                  kAccBiasTopic, acc_bias.header.stamp, acc_bias);
+              bag.write<geometry_msgs::Vector3Stamped>(
+                  kGyroBiasTopic, gyro_bias.header.stamp, gyro_bias);
+            } catch (const rosbag::BagIOException& e) {
+              ROS_WARN_ONCE("Cannot write batch bias to bag: %s", e.what());
+            } catch (const rosbag::BagException& e) {
+              ROS_WARN("Cannot write batch bias: %s", e.what());
+            }
           } catch (const gtsam::ValuesKeyDoesNotExist& e) {
             ROS_WARN_STREAM("Missing value at index: "
                             << idx << ", stamp: " << idx_to_stamp->at(idx)
@@ -833,6 +876,19 @@ void MavStateEstimator::solveBatch(
           ROS_ERROR("Cannot find unary IMU message.");
           break;
         }
+
+        // Log
+        geometry_msgs::PoseStamped pose;
+        publishPose(imu_state, (*imu)->header.stamp, batch_pub, &pose);
+        try {
+          bag.write<geometry_msgs::PoseStamped>(kPoseTopic, pose.header.stamp,
+                                                pose);
+        } catch (const rosbag::BagIOException& e) {
+          ROS_WARN_ONCE("Cannot write batch pose to bag: %s", e.what());
+        } catch (const rosbag::BagException& e) {
+          ROS_WARN("Cannot write batch pose: %s", e.what());
+        }
+        ros::spinOnce();
       }
       ROS_INFO_STREAM("Solved batch solution from "
                       << start << " to " << (*prev_imu)->header.stamp);
@@ -840,6 +896,8 @@ void MavStateEstimator::solveBatch(
   } catch (const std::out_of_range& e) {
     ROS_ERROR("Unary index out of range: %s", e.what());
   }
+
+  bag.close();
   batch_running_.store(false);
 }
 

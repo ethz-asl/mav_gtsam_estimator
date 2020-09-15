@@ -287,6 +287,7 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     tf::vectorMsgToEigen(imu_msg->linear_acceleration, B_g);
     B_g *= -1.0;
     base_frame_ = imu_msg->header.frame_id;
+    ROS_INFO_ONCE("Base frame: %s", base_frame_.c_str());
     init_.setBaseFrame(base_frame_);
     init_.addOrientationConstraint1(I_g, B_g, imu_msg->header.stamp);
     initializeState();
@@ -361,6 +362,7 @@ void MavStateEstimator::posCallback(
   if (!isInitialized()) {
     // GNSS antenna position in inertial frame (ENU).
     inertial_frame_ = pos_msg->header.frame_id;
+    ROS_INFO_ONCE("Inertial frame: %s", inertial_frame_.c_str());
     init_.setInertialFrame(inertial_frame_);
     init_.addPositionConstraint(I_t_P, B_t_P_, pos_msg->header.stamp);
   } else if (addUnaryStamp(pos_msg->header.stamp)) {

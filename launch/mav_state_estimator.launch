@@ -47,5 +47,18 @@
       <node name="rviz" pkg="rviz" type="rviz" output="screen" args="-d $(find mav_state_estimation)/cfg/rviz_config.rviz"/>
       <node name="multiplot" pkg="rqt_multiplot" type="rqt_multiplot" output="screen" args="--multiplot-config $(find mav_state_estimation)/cfg/rqt_multiplot.xml --multiplot-run-all"/>
     </group>
+
+    <!-- External markers -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="flu_broadcaster" args="0 0 0 3.14159265359 0 0 adis16448bmlz_prediction adis16448bmlz_flu" />
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a1_intermediate_broadcaster" args="-0.117 -0.048 -0.008 3.14159265359 0 0 adis16448bmlz_prediction a1_intermediate" />
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a1_broadcaster" args="0 0 0 0 0 -2.35619449019  a1_intermediate a1" />
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a2_intermediate_broadcaster" args="0.395, -0.048, -0.007 3.14159265359 0 0 adis16448bmlz_prediction a2_intermediate" />
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a2_broadcaster" args="0 0 0 0 0 -2.35619449019  a2_intermediate a2" />
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a3_intermediate_broadcaster" args="-0.117, 0.109, -0.163 3.14159265359 0 0 adis16448bmlz_prediction a3_intermediate" />
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a3_broadcaster" args="0 0 0 0 0 -2.35619449019  a3_intermediate a3" />
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a4_intermediate_broadcaster" args="0.395, 0.109, -0.163 3.14159265359 0 0 adis16448bmlz_prediction a4_intermediate" />
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a4_broadcaster" args="0 0 0 0 0 -2.35619449019  a4_intermediate a4" />
+
+    <node pkg="tf2_ros" type="static_transform_publisher" name="bfly_broadcaster" args="0.10508408025980019 -0.05205520138635964 -0.09943669483444449 0.69975849 0.714369 -0.00118323 0.00368684 adis16448bmlz_prediction bfly" />
   </group>
 </launch>

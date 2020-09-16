@@ -1,7 +1,6 @@
 #include "mav_state_estimation/mav_state_estimator.h"
 
 #include <eigen_conversions/eigen_msg.h>
-#include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <geometry_msgs/Vector3Stamped.h>
 #include <gtsam/base/timing.h>
@@ -154,9 +153,9 @@ MavStateEstimator::MavStateEstimator()
   // Advertise topics.
   timing_pub_ = nh_private_.advertise<mav_state_estimation::Timing>(
       "solveThreaded", kQueueSize);
-  prediction_pub_ = nh_private_.advertise<geometry_msgs::PoseStamped>(
+  prediction_pub_ = nh_private_.advertise<geometry_msgs::TransformStamped>(
       "prediction", kQueueSize);
-  optimization_pub_ = nh_private_.advertise<geometry_msgs::PoseStamped>(
+  optimization_pub_ = nh_private_.advertise<geometry_msgs::TransformStamped>(
       "optimization", kQueueSize);
   acc_bias_pub_ = nh_private_.advertise<geometry_msgs::Vector3Stamped>(
       "acc_bias", kQueueSize);
@@ -319,9 +318,10 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
 
     // Publish high rate IMU prediction.
     auto imu_state = integrator_.predict(prev_state_, prev_bias_);
-    geometry_msgs::TransformStamped T_IB;
-    broadcastTf(imu_state, imu_msg->header.stamp, base_frame_, &T_IB);
-    publishPose(imu_state, imu_msg->header.stamp, prediction_pub_);
+    geometry_msgs::TransformStamped T_IB =
+        getTransform(imu_state, imu_msg->header.stamp, base_frame_);
+    tfb_.sendTransform(T_IB);
+    prediction_pub_.publish(T_IB);
     publishOdometry(imu_state.velocity(), ang_vel, prev_bias_,
                     imu_msg->header.stamp, T_IB);
 
@@ -478,28 +478,6 @@ void MavStateEstimator::baselineCallback(
   }
 }
 
-void MavStateEstimator::broadcastTf(const gtsam::NavState& state,
-                                    const ros::Time& stamp,
-                                    const std::string& child_frame_id,
-                                    geometry_msgs::TransformStamped* T_IB) {
-  assert(T_IB);
-  T_IB->header.stamp = stamp;
-  T_IB->header.frame_id = inertial_frame_;
-  T_IB->child_frame_id = child_frame_id;
-
-  tf::vectorEigenToMsg(state.position(), T_IB->transform.translation);
-  tf::quaternionEigenToMsg(state.attitude().toQuaternion(),
-                           T_IB->transform.rotation);
-  tfb_.sendTransform(*T_IB);
-}
-
-void MavStateEstimator::broadcastTf(const gtsam::NavState& state,
-                                    const ros::Time& stamp,
-                                    const std::string& child_frame_id) {
-  geometry_msgs::TransformStamped T_IB;
-  broadcastTf(state, stamp, child_frame_id, &T_IB);
-}
-
 void MavStateEstimator::publishOdometry(
     const Eigen::Vector3d& v_I, const Eigen::Vector3d& omega_B,
     const gtsam::imuBias::ConstantBias& bias, const ros::Time& stamp,
@@ -552,25 +530,19 @@ void MavStateEstimator::publishOdometry(
   odometry_pub_.publish(msg);
 }
 
-void MavStateEstimator::publishPose(const gtsam::NavState& state,
-                                    const ros::Time& stamp,
-                                    const ros::Publisher& pub,
-                                    geometry_msgs::PoseStamped* pose) const {
-  assert(pose);
-  pose->header.stamp = stamp;
-  pose->header.frame_id = inertial_frame_;
+geometry_msgs::TransformStamped MavStateEstimator::getTransform(
+    const gtsam::NavState& state, const ros::Time& stamp,
+    const std::string& child_frame_id) const {
+  geometry_msgs::TransformStamped T_IB;
+  T_IB.header.stamp = stamp;
+  T_IB.header.frame_id = inertial_frame_;
+  T_IB.child_frame_id = child_frame_id;
 
-  tf::pointEigenToMsg(state.position(), pose->pose.position);
+  tf::vectorEigenToMsg(state.position(), T_IB.transform.translation);
   tf::quaternionEigenToMsg(state.attitude().toQuaternion(),
-                           pose->pose.orientation);
-  pub.publish(*pose);
-}
+                           T_IB.transform.rotation);
 
-void MavStateEstimator::publishPose(const gtsam::NavState& state,
-                                    const ros::Time& stamp,
-                                    const ros::Publisher& pub) const {
-  geometry_msgs::PoseStamped pose;
-  publishPose(state, stamp, pub, &pose);
+  return T_IB;
 }
 
 void MavStateEstimator::publishAntennaPosition(
@@ -734,8 +706,10 @@ void MavStateEstimator::solveThreaded(
   timing_msg_.mean = solveThreaded->mean();
   timing_pub_.publish(timing_msg_);
 
-  broadcastTf(new_state, *time, base_frame_ + "_optimization");
-  publishPose(new_state, *time, optimization_pub_);
+  geometry_msgs::TransformStamped T_IB =
+      getTransform(new_state, *time, base_frame_ + "_optimization");
+  tfb_.sendTransform(T_IB);
+  optimization_pub_.publish(T_IB);
   publishBias(bias, *time, acc_bias_pub_, gyro_bias_pub_);
   publishAntennaPosition(B_t_P, *time, position_antenna_pub_);
   publishAntennaPosition(B_t_A, *time, attitude_antenna_pub_);
@@ -828,15 +802,15 @@ void MavStateEstimator::solveBatch(
   const uint32_t kQueueSize = 1800000;
   const std::string kAccBiasTopic = "batch_acc_bias";
   const std::string kGyroBiasTopic = "batch_gyro_bias";
-  const std::string kPoseTopic = "batch";
+  const std::string kTfTopic = "batch";
   auto batch_acc_bias_pub =
       nh_private_.advertise<geometry_msgs::Vector3Stamped>(kAccBiasTopic,
                                                            kQueueSize);
   auto batch_gyro_bias_pub =
       nh_private_.advertise<geometry_msgs::Vector3Stamped>(kGyroBiasTopic,
                                                            kQueueSize);
-  auto batch_pub =
-      nh_private_.advertise<geometry_msgs::PoseStamped>(kPoseTopic, kQueueSize);
+  auto batch_pub = nh_private_.advertise<geometry_msgs::TransformStamped>(
+      kTfTopic, kQueueSize);
   ros::spinOnce();
 
   gtsam::LevenbergMarquardtOptimizer optimizer(*graph, *values);
@@ -897,10 +871,11 @@ void MavStateEstimator::solveBatch(
         }
 
         // Log
-        geometry_msgs::PoseStamped pose;
-        publishPose(imu_state, (*imu)->header.stamp, batch_pub, &pose);
+        geometry_msgs::TransformStamped T_IB =
+            getTransform(imu_state, (*imu)->header.stamp, base_frame_);
+        batch_pub.publish(T_IB);
         try {
-          bag.write(kPoseTopic, pose.header.stamp, pose);
+          bag.write(kTfTopic, T_IB.header.stamp, T_IB);
         } catch (const rosbag::BagIOException& e) {
           ROS_WARN_ONCE("Cannot write batch pose to bag: %s", e.what());
         } catch (const rosbag::BagException& e) {
@@ -908,20 +883,13 @@ void MavStateEstimator::solveBatch(
         }
 
         // Additional external poses
-        geometry_msgs::TransformStamped T_IB;
-        T_IB.header = pose.header;
-        T_IB.child_frame_id = base_frame_;
-        T_IB.transform.rotation = pose.pose.orientation;
-        Eigen::Vector3d t;
-        tf::pointMsgToEigen(pose.pose.position, t);
-        tf::vectorEigenToMsg(t, T_IB.transform.translation);
         tf2::Stamped<tf2::Transform> tf2_T_IB;
         tf2::fromMsg(T_IB, tf2_T_IB);
         for (const auto& frame : external_poses_) {
           geometry_msgs::TransformStamped T_BE;
           try {
             T_BE = tf_buffer_.lookupTransform(base_frame_, frame,
-                                              pose.header.stamp);
+                                              T_IB.header.stamp);
           } catch (...) {
             ROS_WARN("Cannot lookup T_BE from B: %s E: %s", base_frame_.c_str(),
                      frame.c_str());
@@ -933,7 +901,7 @@ void MavStateEstimator::solveBatch(
 
           geometry_msgs::TransformStamped T_IE;
           T_IE.transform = tf2::toMsg(tf2_T_IE);
-          T_IE.header.stamp = pose.header.stamp;
+          T_IE.header.stamp = T_IB.header.stamp;
           T_IE.header.frame_id = inertial_frame_;
           T_IE.child_frame_id = frame;
 

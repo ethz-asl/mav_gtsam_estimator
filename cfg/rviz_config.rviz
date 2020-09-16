@@ -12,6 +12,9 @@ Panels:
         - /Marker2
         - /PoseWithCovariance1
         - /PoseWithCovariance2
+        - /Odometry1
+        - /Odometry1/Shape1
+        - /Odometry1/Covariance1/Position1
       Splitter Ratio: 0.5
     Tree Height: 732
   - Class: rviz/Selection
@@ -67,23 +70,31 @@ Visualization Manager:
           Value: true
         a1_intermediate:
           Value: false
+        a1_tilt:
+          Value: false
         a2:
           Value: true
         a2_intermediate:
+          Value: false
+        a2_tilt:
           Value: false
         a3:
           Value: true
         a3_intermediate:
           Value: false
+        a3_tilt:
+          Value: false
         a4:
           Value: true
         a4_intermediate:
           Value: false
+        a4_tilt:
+          Value: false
+        adis16448bmlz:
+          Value: true
         adis16448bmlz_flu:
           Value: true
         adis16448bmlz_optimization:
-          Value: false
-        adis16448bmlz_prediction:
           Value: false
         bfly:
           Value: true
@@ -96,25 +107,29 @@ Visualization Manager:
       Show Names: true
       Tree:
         enu:
-          adis16448bmlz_optimization:
-            {}
-          adis16448bmlz_prediction:
+          adis16448bmlz:
             a1_intermediate:
-              a1:
-                {}
+              a1_tilt:
+                a1:
+                  {}
             a2_intermediate:
-              a2:
-                {}
+              a2_tilt:
+                a2:
+                  {}
             a3_intermediate:
-              a3:
-                {}
+              a3_tilt:
+                a3:
+                  {}
             a4_intermediate:
-              a4:
-                {}
+              a4_tilt:
+                a4:
+                  {}
             adis16448bmlz_flu:
               {}
             bfly:
               {}
+          adis16448bmlz_optimization:
+            {}
       Update Interval: 0
       Value: true
     - Class: rviz/Marker
@@ -193,6 +208,40 @@ Visualization Manager:
       Topic: /moa/piksi/attitude_receiver_0/ros/pose_enu_cov
       Unreliable: false
       Value: false
+    - Angle Tolerance: 0.10000000149011612
+      Class: rviz/Odometry
+      Covariance:
+        Orientation:
+          Alpha: 0.5
+          Color: 255; 255; 127
+          Color Style: Unique
+          Frame: Local
+          Offset: 1
+          Scale: 1
+          Value: true
+        Position:
+          Alpha: 0.30000001192092896
+          Color: 204; 51; 204
+          Scale: 1
+          Value: true
+        Value: true
+      Enabled: true
+      Keep: 100
+      Name: Odometry
+      Position Tolerance: 0.10000000149011612
+      Shape:
+        Alpha: 1
+        Axes Length: 1
+        Axes Radius: 0.10000000149011612
+        Color: 255; 25; 0
+        Head Length: 0.05999999865889549
+        Head Radius: 0.019999999552965164
+        Shaft Length: 0.20000000298023224
+        Shaft Radius: 0.009999999776482582
+        Value: Arrow
+      Topic: /moa/mav_state_estimator/odometry
+      Unreliable: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 211; 215; 207
@@ -222,25 +271,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/ThirdPersonFollower
-      Distance: 2.4155168533325195
+      Distance: 7.598544120788574
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0
-        Y: 0
-        Z: 0
+        X: -0.3069273829460144
+        Y: -1.0078397989273071
+        Z: 5.960464477539063e-8
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.3453984558582306
+      Pitch: 0.27039819955825806
       Target Frame: adis16448bmlz_flu
       Value: ThirdPersonFollower (rviz)
-      Yaw: 1.2803977727890015
+      Yaw: 5.418583393096924
     Saved: ~
 Window Geometry:
   Displays:

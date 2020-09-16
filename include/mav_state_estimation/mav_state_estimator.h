@@ -45,16 +45,14 @@ class MavStateEstimator {
       const piksi_rtk_msgs::PositionWithCovarianceStamped::ConstPtr&
           baseline_msg);
 
+  geometry_msgs::TransformStamped getTransform(
+      const gtsam::NavState& state, const ros::Time& stamp,
+      const std::string& child_frame_id) const;
   void broadcastTf(const gtsam::NavState& state, const ros::Time& stamp,
                    const std::string& child_frame_id);
   void broadcastTf(const gtsam::NavState& state, const ros::Time& stamp,
                    const std::string& child_frame_id,
                    geometry_msgs::TransformStamped* T_IB);
-  void publishPose(const gtsam::NavState& state, const ros::Time& stamp,
-                   const ros::Publisher& pub) const;
-  void publishPose(const gtsam::NavState& state, const ros::Time& stamp,
-                   const ros::Publisher& pub,
-                   geometry_msgs::PoseStamped* pose) const;
   void publishOdometry(const Eigen::Vector3d& v_I,
                        const Eigen::Vector3d& omega_B,
                        const gtsam::imuBias::ConstantBias& bias,

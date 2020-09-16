@@ -860,10 +860,8 @@ void MavStateEstimator::solveBatch(
             publishBias(prev_bias, (*imu)->header.stamp, batch_acc_bias_pub,
                         batch_gyro_bias_pub, &acc_bias, &gyro_bias);
             try {
-              bag.write<geometry_msgs::Vector3Stamped>(
-                  kAccBiasTopic, acc_bias.header.stamp, acc_bias);
-              bag.write<geometry_msgs::Vector3Stamped>(
-                  kGyroBiasTopic, gyro_bias.header.stamp, gyro_bias);
+              bag.write(kAccBiasTopic, acc_bias.header.stamp, acc_bias);
+              bag.write(kGyroBiasTopic, gyro_bias.header.stamp, gyro_bias);
             } catch (const rosbag::BagIOException& e) {
               ROS_WARN_ONCE("Cannot write batch bias to bag: %s", e.what());
             } catch (const rosbag::BagException& e) {
@@ -883,8 +881,7 @@ void MavStateEstimator::solveBatch(
         geometry_msgs::PoseStamped pose;
         publishPose(imu_state, (*imu)->header.stamp, batch_pub, &pose);
         try {
-          bag.write<geometry_msgs::PoseStamped>(kPoseTopic, pose.header.stamp,
-                                                pose);
+          bag.write(kPoseTopic, pose.header.stamp, pose);
         } catch (const rosbag::BagIOException& e) {
           ROS_WARN_ONCE("Cannot write batch pose to bag: %s", e.what());
         } catch (const rosbag::BagException& e) {
@@ -922,8 +919,7 @@ void MavStateEstimator::solveBatch(
           T_IE.child_frame_id = frame;
 
           try {
-            bag.write<geometry_msgs::TransformStamped>(frame, T_IE.header.stamp,
-                                                       T_IE);
+            bag.write(frame, T_IE.header.stamp, T_IE);
           } catch (const rosbag::BagIOException& e) {
             ROS_WARN_ONCE("Cannot write batch pose %s to bag: %s",
                           frame.c_str(), e.what());

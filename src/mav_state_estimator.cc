@@ -801,9 +801,11 @@ void MavStateEstimator::solveBatch(
   }
 
   const uint32_t kQueueSize = 1800000;
-  const std::string kAccBiasTopic = "batch_acc_bias";
-  const std::string kGyroBiasTopic = "batch_gyro_bias";
-  const std::string kTfTopic = "batch";
+  const std::string kAccBiasTopic =
+      nh_private_.getNamespace() + "/batch_acc_bias";
+  const std::string kGyroBiasTopic =
+      nh_private_.getNamespace() + "/batch_gyro_bias";
+  const std::string kTfTopic = nh_private_.getNamespace() + "/batch";
   auto batch_acc_bias_pub =
       nh_private_.advertise<geometry_msgs::Vector3Stamped>(kAccBiasTopic,
                                                            kQueueSize);
@@ -877,6 +879,10 @@ void MavStateEstimator::solveBatch(
         batch_pub.publish(T_IB);
         try {
           bag.write(kTfTopic, T_IB.header.stamp, T_IB);
+
+          tf2_msgs::TFMessage tfmsg;
+          tfmsg.transforms.push_back(T_IB);
+          bag.write("/tf", T_IB.header.stamp, tfmsg);
         } catch (const rosbag::BagIOException& e) {
           ROS_WARN_ONCE("Cannot write batch pose to bag: %s", e.what());
         } catch (const rosbag::BagException& e) {
@@ -906,10 +912,11 @@ void MavStateEstimator::solveBatch(
           T_IE.header.frame_id = inertial_frame_;
           T_IE.child_frame_id = frame;
 
-          tf2_msgs::TFMessage tfmsg;
-          tfmsg.transforms.push_back(T_IE);
           try {
             bag.write(frame, T_IE.header.stamp, T_IE);
+
+            tf2_msgs::TFMessage tfmsg;
+            tfmsg.transforms.push_back(T_IE);
             bag.write("/tf", T_IE.header.stamp, tfmsg);
           } catch (const rosbag::BagIOException& e) {
             ROS_WARN_ONCE("Cannot write batch pose %s to bag: %s",

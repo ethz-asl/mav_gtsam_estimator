@@ -322,8 +322,8 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     geometry_msgs::TransformStamped T_IB;
     broadcastTf(imu_state, imu_msg->header.stamp, base_frame_, &T_IB);
     publishPose(imu_state, imu_msg->header.stamp, prediction_pub_);
-    publishOdometry(imu_state, ang_vel, prev_bias_, imu_msg->header.stamp,
-                    T_IB);
+    publishOdometry(imu_state.velocity(), ang_vel, prev_bias_,
+                    imu_msg->header.stamp, T_IB);
 
     // Setup new inbetween IMU factor.
     if (addUnaryStamp(imu_msg->header.stamp)) {
@@ -501,35 +501,53 @@ void MavStateEstimator::broadcastTf(const gtsam::NavState& state,
 }
 
 void MavStateEstimator::publishOdometry(
-    const gtsam::NavState& state, const Eigen::Vector3d& omega_B,
+    const Eigen::Vector3d& v_I, const Eigen::Vector3d& omega_B,
     const gtsam::imuBias::ConstantBias& bias, const ros::Time& stamp,
     const geometry_msgs::TransformStamped& T_IB) const {
-  nav_msgs::Odometry msg;
-  msg.header.stamp = stamp;
-  msg.header.frame_id = inertial_frame_;
-  msg.child_frame_id = base_frame_;
-  tf::pointEigenToMsg(state.position(), msg.pose.pose.position);
-  tf::quaternionEigenToMsg(state.attitude().toQuaternion(),
-                           msg.pose.pose.orientation);
-
-  geometry_msgs::Vector3Stamped v_I, v_B;
-  tf::vectorEigenToMsg(state.velocity(), v_I.vector);
-  v_I.header = msg.header;
   assert(T_IB.header.stamp == stamp);
   assert(T_IB.header.frame_id == inertial_frame_);
   assert(T_IB.child_frame_id == base_frame_);
 
-  tf2::Stamped<tf2::Transform> tf2_T_IB;
-  tf2::fromMsg(T_IB, tf2_T_IB);
-  auto T_BI = T_IB;
-  T_BI.header.frame_id = T_IB.child_frame_id;
-  T_BI.child_frame_id = T_IB.header.frame_id;
-  T_BI.transform = tf2::toMsg(tf2_T_IB.inverse());
-  tf2::doTransform(v_I, v_B, T_BI);
-  msg.twist.twist.linear = v_B.vector;
+  nav_msgs::Odometry msg;
+  msg.header.stamp = stamp;
+  msg.header.frame_id = inertial_frame_;
+  msg.child_frame_id = "FLU";  // Publish odometry in FLU frame.
 
-  auto omega_B_corrected = omega_B - bias.gyroscope();
-  tf::vectorEigenToMsg(omega_B_corrected, msg.twist.twist.angular);
+  try {
+    geometry_msgs::TransformStamped T_BF;
+    T_BF = tf_buffer_.lookupTransform(base_frame_, msg.child_frame_id, stamp);
+    tf2::Stamped<tf2::Transform> tf2_T_IB, tf2_T_BF;
+    tf2::fromMsg(T_IB, tf2_T_IB);
+    tf2::fromMsg(T_BF, tf2_T_BF);
+
+    // Pose
+    auto tf2_T_IF = tf2_T_IB * tf2_T_BF;
+
+    auto t_IF = tf2::toMsg(tf2_T_IF.getOrigin());
+    Eigen::Vector3d p_IF;
+    tf::vectorMsgToEigen(t_IF, p_IF);
+    tf::pointEigenToMsg(p_IF, msg.pose.pose.position);
+
+    msg.pose.pose.orientation = tf2::toMsg(tf2_T_IF.getRotation());
+
+    // Twist
+    tf::vectorEigenToMsg(v_I, msg.twist.twist.linear);
+    tf2::Vector3 tf_v_I;
+    tf2::fromMsg(msg.twist.twist.linear, tf_v_I);
+    // TODO(rikba): Account for possible lever arm omega x r
+    msg.twist.twist.linear =
+        tf2::toMsg(tf2::quatRotate(tf2_T_IF.getRotation().inverse(), tf_v_I));
+
+    auto omega_B_corrected = omega_B - bias.gyroscope();
+    tf::vectorEigenToMsg(omega_B_corrected, msg.twist.twist.angular);
+    tf2::Vector3 tf_omega_B;
+    tf2::fromMsg(msg.twist.twist.angular, tf_omega_B);
+    msg.twist.twist.angular = tf2::toMsg(
+        tf2::quatRotate(tf2_T_BF.getRotation().inverse(), tf_omega_B));
+  } catch (...) {
+    ROS_ERROR_ONCE("No odometry. Cannot lookup T_BF from B: %s F: %s",
+                   base_frame_.c_str(), msg.child_frame_id.c_str());
+  }
 
   odometry_pub_.publish(msg);
 }

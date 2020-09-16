@@ -49,7 +49,8 @@
     </group>
 
     <!-- External markers -->
-    <node pkg="tf2_ros" type="static_transform_publisher" name="flu_broadcaster" args="0 0 0 3.14159265359 0 0 adis16448bmlz adis16448bmlz_flu" />
+    <node pkg="tf2_ros" type="static_transform_publisher" name="flu_broadcaster" args="0 0 0 3.14159265359 0 0 adis16448bmlz FLU" />
+    
     <node pkg="tf2_ros" type="static_transform_publisher" name="a1_intermediate_broadcaster" args="-0.117 -0.048 -0.008 3.14159265359 0 0 adis16448bmlz a1_intermediate" />
     <node pkg="tf2_ros" type="static_transform_publisher" name="a1_tilt_broadcaster" args="0 0 0 0 0 -2.35619449019 a1_intermediate a1_tilt" />
     <node pkg="tf2_ros" type="static_transform_publisher" name="a1_broadcaster" args="0 0 0 0 0 0  a1_tilt a1" /> <!-- horizontal polarization -->

@@ -55,7 +55,7 @@ class MavStateEstimator {
   void publishPose(const gtsam::NavState& state, const ros::Time& stamp,
                    const ros::Publisher& pub,
                    geometry_msgs::PoseStamped* pose) const;
-  void publishOdometry(const gtsam::NavState& state,
+  void publishOdometry(const Eigen::Vector3d& v_I,
                        const Eigen::Vector3d& omega_B,
                        const gtsam::imuBias::ConstantBias& bias,
                        const ros::Time& stamp,

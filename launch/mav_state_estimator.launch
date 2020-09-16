@@ -2,12 +2,15 @@
 <launch>
   <arg name="mav_name" default="moa"/>
   <arg name="bag_base" default="/home/rik/data/2020_08_05_gannertshofen/estimator_development/sensors_2020-08-05-13-13-56"/>
+  <arg name="replay_bag" default="false"/>
   <arg name="record" default="false"/>
-  <arg name="visualize" default="true"/>
+  <arg name="visualize" default="false"/>
 
   <group ns="$(arg mav_name)">
     <!-- Start rosbag -->
-    <node pkg="rosbag" type="play" name="rosbag_play" output="screen" args="-q -r 1 --clock $(arg bag_base).bag" required="false"/>
+    <group if="$(arg replay_bag)">
+      <node pkg="rosbag" type="play" name="rosbag_play" output="screen" args="-q -r 1 --clock $(arg bag_base).bag" required="false"/>
+    </group>
 
     <!-- Estimator -->
     <node name="mav_state_estimator" pkg="mav_state_estimation" type="mav_state_estimator" clear_params="true" output="screen">

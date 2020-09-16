@@ -29,6 +29,7 @@ namespace mav_state_estimation {
 MavStateEstimator::MavStateEstimator()
     : nh_(ros::NodeHandle()), nh_private_(ros::NodeHandle("~")) {
   // Get parameters.
+  nh_private_.getParam("external_poses", external_poses_);
 
   // GNSS
   nh_private_.getParam("estimate_antenna_positions",
@@ -95,6 +96,7 @@ MavStateEstimator::MavStateEstimator()
   integrator_ =
       gtsam::PreintegratedCombinedMeasurements(imu_params, prev_bias_);
 
+  // ISAM2
   gtsam::ISAM2Params parameters;
   // TODO(rikba): Set more ISAM2 params here.
   double relinearize_threshold_rot, relinearize_threshold_pos,
@@ -888,6 +890,48 @@ void MavStateEstimator::solveBatch(
         } catch (const rosbag::BagException& e) {
           ROS_WARN("Cannot write batch pose: %s", e.what());
         }
+
+        // Additional external poses
+        geometry_msgs::TransformStamped T_IB;
+        T_IB.header = pose.header;
+        T_IB.child_frame_id = base_frame_;
+        T_IB.transform.rotation = pose.pose.orientation;
+        Eigen::Vector3d t;
+        tf::pointMsgToEigen(pose.pose.position, t);
+        tf::vectorEigenToMsg(t, T_IB.transform.translation);
+        tf2::Stamped<tf2::Transform> tf2_T_IB;
+        tf2::fromMsg(T_IB, tf2_T_IB);
+        for (const auto& frame : external_poses_) {
+          geometry_msgs::TransformStamped T_BE;
+          try {
+            T_BE = tf_buffer_.lookupTransform(base_frame_, frame,
+                                              pose.header.stamp);
+          } catch (...) {
+            ROS_WARN("Cannot lookup T_BE from B: %s E: %s", base_frame_.c_str(),
+                     frame.c_str());
+            continue;
+          }
+          tf2::Stamped<tf2::Transform> tf2_T_BE;
+          tf2::fromMsg(T_BE, tf2_T_BE);
+          auto tf2_T_IE = tf2_T_IB * tf2_T_BE;
+
+          geometry_msgs::TransformStamped T_IE;
+          T_IE.transform = tf2::toMsg(tf2_T_IE);
+          T_IE.header.stamp = pose.header.stamp;
+          T_IE.header.frame_id = inertial_frame_;
+          T_IE.child_frame_id = frame;
+
+          try {
+            bag.write<geometry_msgs::TransformStamped>(frame, T_IE.header.stamp,
+                                                       T_IE);
+          } catch (const rosbag::BagIOException& e) {
+            ROS_WARN_ONCE("Cannot write batch pose %s to bag: %s",
+                          frame.c_str(), e.what());
+          } catch (const rosbag::BagException& e) {
+            ROS_WARN("Cannot write batch pose %s: %s", frame.c_str(), e.what());
+          }
+        }
+
         ros::spinOnce();
       }
       ROS_INFO_STREAM("Solved batch solution from "

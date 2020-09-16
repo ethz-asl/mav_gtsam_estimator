@@ -104,6 +104,7 @@ class MavStateEstimator {
   tf2_ros::TransformBroadcaster tfb_;
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tfl_ = tf2_ros::TransformListener(tf_buffer_);
+  std::vector<std::string> external_poses_;
 
   // Initial parameters.
   Initialization init_;

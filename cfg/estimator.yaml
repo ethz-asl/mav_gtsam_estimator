@@ -43,3 +43,5 @@ isam2:
   relinearize_skip: 1
   enable_partial_relinarization_check: False
   max_window: 300
+
+external_poses: ["a1", "a2", "a3", "a4", "bfly"]

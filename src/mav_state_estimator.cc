@@ -5,6 +5,7 @@
 #include <geometry_msgs/Vector3Stamped.h>
 #include <gtsam/base/timing.h>
 #include <gtsam/inference/Symbol.h>
+#include <gtsam/navigation/CombinedImuFactor.h>
 #include <gtsam/slam/BetweenFactor.h>
 #include <nav_msgs/Odometry.h>
 #include <ros/ros.h>

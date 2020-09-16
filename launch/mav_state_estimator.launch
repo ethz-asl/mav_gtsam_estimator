@@ -5,24 +5,35 @@
   <arg name="replay_bag" default="false"/>
   <arg name="record" default="false"/>
   <arg name="visualize" default="false"/>
+  <arg name="output" default="screen"/>
 
   <group ns="$(arg mav_name)">
     <!-- Start rosbag -->
     <group if="$(arg replay_bag)">
-      <node pkg="rosbag" type="play" name="rosbag_play" output="screen" args="-q -r 1 --clock $(arg bag_base).bag" required="false"/>
+      <node pkg="rosbag" type="play" name="rosbag_play" output="$(arg output)" args="-q -r 1 --clock $(arg bag_base).bag" required="false"/>
     </group>
 
     <!-- Estimator -->
-    <node name="mav_state_estimator" pkg="mav_state_estimation" type="mav_state_estimator" clear_params="true" output="screen">
+    <node name="mav_state_estimator" pkg="mav_state_estimation" type="mav_state_estimator" clear_params="true" output="$(arg output)">
       <remap from="imu0" to="adis16448bmlz/imu/data_raw"/>
       <remap from="pos0" to="piksi/position_receiver_0/ros/pos_enu_cov"/>
       <remap from="baseline0" to="piksi/attitude_receiver_0/ros/baseline_ned"/>
       <rosparam file="$(find mav_state_estimation)/cfg/estimator.yaml"/>
     </node>
 
-    <node name="euler_optimization_pub" pkg="topic_tools" type="transform" output="screen" args="/$(arg mav_name)/mav_state_estimator/optimization /$(arg mav_name)/mav_state_estimator/optimization_euler geometry_msgs/Vector3Stamped 'geometry_msgs.msg.Vector3Stamped(header=m.header, vector=geometry_msgs.msg.Vector3(*[math.degrees(x) for x in tf.transformations.euler_from_quaternion([m.transform.rotation.x, m.transform.rotation.y, m.transform.rotation.z, m.transform.rotation.w])]))' --import math tf geometry_msgs std_msgs" />
+    <node
+      name="euler_optimization_pub"
+      pkg="topic_tools"
+      type="transform"
+      output="$(arg output)"
+      args="/$(arg mav_name)/mav_state_estimator/optimization /$(arg mav_name)/mav_state_estimator/optimization_euler geometry_msgs/Vector3Stamped 'geometry_msgs.msg.Vector3Stamped(header=m.header, vector=geometry_msgs.msg.Vector3(*[math.degrees(x) for x in tf.transformations.euler_from_quaternion([m.transform.rotation.x, m.transform.rotation.y, m.transform.rotation.z, m.transform.rotation.w])]))' --import math tf geometry_msgs std_msgs"/>
 
-    <node name="euler_prediction_pub" pkg="topic_tools" type="transform" output="screen" args="/$(arg mav_name)/mav_state_estimator/prediction /$(arg mav_name)/mav_state_estimator/prediction_euler geometry_msgs/Vector3Stamped 'geometry_msgs.msg.Vector3Stamped(header=m.header, vector=geometry_msgs.msg.Vector3(*[math.degrees(x) for x in tf.transformations.euler_from_quaternion([m.transform.rotation.x, m.transform.rotation.y, m.transform.rotation.z, m.transform.rotation.w])]))' --import math tf geometry_msgs std_msgs" />
+    <node
+      name="euler_prediction_pub"
+      pkg="topic_tools"
+      type="transform"
+      output="$(arg output)"
+      args="/$(arg mav_name)/mav_state_estimator/prediction /$(arg mav_name)/mav_state_estimator/prediction_euler geometry_msgs/Vector3Stamped 'geometry_msgs.msg.Vector3Stamped(header=m.header, vector=geometry_msgs.msg.Vector3(*[math.degrees(x) for x in tf.transformations.euler_from_quaternion([m.transform.rotation.x, m.transform.rotation.y, m.transform.rotation.z, m.transform.rotation.w])]))' --import math tf geometry_msgs std_msgs"/>
 
     <!-- Rosbag -->
     <group if="$(arg record)">
@@ -30,7 +41,7 @@
         pkg="rosbag"
         type="record"
         name="record"
-        output="screen"
+        output="$(arg output)"
         args="--buffsize=0
         --output-prefix=$(arg bag_base)_estimator
         /$(arg mav_name)/mav_state_estimator/optimization
@@ -47,29 +58,33 @@
 
     <!-- Viz -->
     <group if="$(arg visualize)">
-      <node name="rviz" pkg="rviz" type="rviz" output="screen" args="-d $(find mav_state_estimation)/cfg/rviz_config.rviz"/>
-      <node name="multiplot" pkg="rqt_multiplot" type="rqt_multiplot" output="screen" args="--multiplot-config $(find mav_state_estimation)/cfg/rqt_multiplot.xml --multiplot-run-all"/>
+      <node name="rviz" pkg="rviz" type="rviz" output="$(arg output)" args="-d $(find mav_state_estimation)/cfg/rviz_config.rviz"/>
+      <node name="multiplot" pkg="rqt_multiplot" type="rqt_multiplot" output="$(arg output)" args="--multiplot-config $(find mav_state_estimation)/cfg/rqt_multiplot.xml --multiplot-run-all"/>
     </group>
 
     <!-- External markers -->
-    <node pkg="tf2_ros" type="static_transform_publisher" name="flu_broadcaster" args="0 0 0 3.14159265359 0 0 adis16448bmlz FLU" />
+    <node pkg="tf2_ros" type="static_transform_publisher" name="flu_broadcaster" args="0 0 0 3.14159265359 0 0 adis16448bmlz FLU"/>
 
-    <node pkg="tf2_ros" type="static_transform_publisher" name="a1_intermediate_broadcaster" args="-0.117 -0.048 -0.008 3.14159265359 0 0 adis16448bmlz a1_intermediate" />
-    <node pkg="tf2_ros" type="static_transform_publisher" name="a1_tilt_broadcaster" args="0 0 0 0 0 -2.35619449019 a1_intermediate a1_tilt" />
-    <node pkg="tf2_ros" type="static_transform_publisher" name="a1_broadcaster" args="0 0 0 0 0 0  a1_tilt a1" /> <!-- horizontal polarization -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a1_intermediate_broadcaster" args="-0.117 -0.048 -0.008 3.14159265359 0 0 adis16448bmlz a1_intermediate"/>
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a1_tilt_broadcaster" args="0 0 0 0 0 -2.35619449019 a1_intermediate a1_tilt"/>
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a1_broadcaster" args="0 0 0 0 0 0  a1_tilt a1"/>
+    <!-- horizontal polarization -->
 
-    <node pkg="tf2_ros" type="static_transform_publisher" name="a2_intermediate_broadcaster" args="0.395, -0.048, -0.007 3.14159265359 0 0 adis16448bmlz a2_intermediate" />
-    <node pkg="tf2_ros" type="static_transform_publisher" name="a2_tilt_broadcaster" args="0 0 0 0 0 -2.35619449019 a2_intermediate a2_tilt" />
-    <node pkg="tf2_ros" type="static_transform_publisher" name="a2_broadcaster" args="0 0 0 0 0 0  a2_tilt a2" /> <!-- horizontal polarization -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a2_intermediate_broadcaster" args="0.395, -0.048, -0.007 3.14159265359 0 0 adis16448bmlz a2_intermediate"/>
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a2_tilt_broadcaster" args="0 0 0 0 0 -2.35619449019 a2_intermediate a2_tilt"/>
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a2_broadcaster" args="0 0 0 0 0 0  a2_tilt a2"/>
+    <!-- horizontal polarization -->
 
-    <node pkg="tf2_ros" type="static_transform_publisher" name="a3_intermediate_broadcaster" args="-0.117, 0.109, -0.163 3.14159265359 0 0 adis16448bmlz a3_intermediate" />
-    <node pkg="tf2_ros" type="static_transform_publisher" name="a3_tilt_broadcaster" args="0 0 0 0 0 -2.35619449019 a3_intermediate a3_tilt" />
-    <node pkg="tf2_ros" type="static_transform_publisher" name="a3_broadcaster" args="0 0 0 1.57079632679 0 0 a3_tilt a3" /> <!-- vertical polarization -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a3_intermediate_broadcaster" args="-0.117, 0.109, -0.163 3.14159265359 0 0 adis16448bmlz a3_intermediate"/>
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a3_tilt_broadcaster" args="0 0 0 0 0 -2.35619449019 a3_intermediate a3_tilt"/>
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a3_broadcaster" args="0 0 0 1.57079632679 0 0 a3_tilt a3"/>
+    <!-- vertical polarization -->
 
-    <node pkg="tf2_ros" type="static_transform_publisher" name="a4_intermediate_broadcaster" args="0.395, 0.109, -0.163 3.14159265359 0 0 adis16448bmlz a4_intermediate" />
-    <node pkg="tf2_ros" type="static_transform_publisher" name="a4_tilt_broadcaster" args="0 0 0 0 0 -2.35619449019 a4_intermediate a4_tilt" />
-    <node pkg="tf2_ros" type="static_transform_publisher" name="a4_broadcaster" args="0 0 0 1.57079632679 0 0 a4_tilt a4" /> <!-- vertical polarization -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a4_intermediate_broadcaster" args="0.395, 0.109, -0.163 3.14159265359 0 0 adis16448bmlz a4_intermediate"/>
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a4_tilt_broadcaster" args="0 0 0 0 0 -2.35619449019 a4_intermediate a4_tilt"/>
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a4_broadcaster" args="0 0 0 1.57079632679 0 0 a4_tilt a4"/>
+    <!-- vertical polarization -->
 
-    <node pkg="tf2_ros" type="static_transform_publisher" name="bfly_broadcaster" args="0.10508408025980019 -0.05205520138635964 -0.09943669483444449 0.69975849 0.714369 -0.00118323 0.00368684 adis16448bmlz bfly" />
+    <node pkg="tf2_ros" type="static_transform_publisher" name="bfly_broadcaster" args="0.10508408025980019 -0.05205520138635964 -0.09943669483444449 0.69975849 0.714369 -0.00118323 0.00368684 adis16448bmlz bfly"/>
   </group>
 </launch>

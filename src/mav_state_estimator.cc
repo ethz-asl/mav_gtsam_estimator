@@ -11,6 +11,7 @@
 #include <ros/ros.h>
 #include <rosbag/bag.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <tf2_msgs/TFMessage.h>
 
 #include "mav_state_estimation/Timing.h"
 #include "mav_state_estimation/absolute_position_factor.h"
@@ -918,8 +919,11 @@ void MavStateEstimator::solveBatch(
           T_IE.header.frame_id = inertial_frame_;
           T_IE.child_frame_id = frame;
 
+          tf2_msgs::TFMessage tfmsg;
+          tfmsg.transforms.push_back(T_IE);
           try {
             bag.write(frame, T_IE.header.stamp, T_IE);
+            bag.write("/tf", T_IE.header.stamp, tfmsg);
           } catch (const rosbag::BagIOException& e) {
             ROS_WARN_ONCE("Cannot write batch pose %s to bag: %s",
                           frame.c_str(), e.what());

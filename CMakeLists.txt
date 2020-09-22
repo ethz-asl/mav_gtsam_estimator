@@ -6,6 +6,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 set(CMAKE_BUILD_TYPE Release)
 
 find_package(catkin_simple REQUIRED)
+catkin_python_setup()
 catkin_simple(ALL_DEPS_REQUIRED)
 find_package(GTSAM REQUIRED)
 find_package(Eigen3 REQUIRED)

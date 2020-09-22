@@ -1,0 +1,16 @@
+#!/usr/bin/python
+
+from mav_state_estimation.csv_export import*
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(description='Bag merging.')
+    parser.add_argument('input_bag', nargs=1, help='The bag containing stamped poses.')
+    parser.add_argument('pose_topics', nargs='+', help='All pose topics to export.')
+
+    args = parser.parse_args()
+
+    print("Input bag: %s" %(args.input_bag[0]))
+    print("Pose topics: %s" %(args.pose_topics))
+
+    toCsv(args.input_bag[0], args.pose_topics)

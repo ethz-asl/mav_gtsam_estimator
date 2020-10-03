@@ -131,13 +131,14 @@ MavStateEstimator::MavStateEstimator()
   thresholds['a'] =
       Eigen::Vector3d::Constant(relinearize_threshold_antenna_calibration);
   parameters.relinearizeThreshold = thresholds;
-  // parameters.optimizationParams = gtsam::ISAM2DoglegParams();
   nh_private_.getParam("isam2/relinearize_skip", parameters.relinearizeSkip);
   nh_private_.getParam("isam2/enable_partial_relinarization_check",
                        parameters.enablePartialRelinearizationCheck);
-  isam2_ = gtsam::ISAM2(parameters);
 
-  nh_private_.getParam("isam2/max_window", max_window_);
+  double smoother_lag = 0.0;
+  nh_private_.getParam("isam2/smoother_lag", smoother_lag);
+
+  smoother_ = gtsam::IncrementalFixedLagSmoother(smoother_lag, parameters);
 
   // Subscribe to topics.
   const uint32_t kQueueSize = 1000;
@@ -275,6 +276,7 @@ void MavStateEstimator::initializeState() {
     next_state_time.nsec =
         *unary_times_ns_.upper_bound(T_IB_0.header.stamp.nsec);
     addUnaryStamp(next_state_time);
+    updateTimestampMap();
 
     // Print
     new_values_.print("Initial state: ");
@@ -354,6 +356,8 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
         new_values_.insert(A(idx_), B_t_A_);
       }
 
+      updateTimestampMap();
+
       // Attempt to run solver thread.
       solve();
     }
@@ -362,6 +366,17 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
   }
   prev_imu_ = imu_msg;
   batch_imu_.push_back(imu_msg);
+}
+
+void MavStateEstimator::updateTimestampMap() {
+  auto new_stamp = idx_to_stamp_[idx_].toSec();
+  new_timestamps_[B(idx_)] = new_stamp;
+  new_timestamps_[X(idx_)] = new_stamp;
+  new_timestamps_[V(idx_)] = new_stamp;
+  if (estimate_antenna_positions_) {
+    new_timestamps_[P(idx_)] = new_stamp;
+    new_timestamps_[A(idx_)] = new_stamp;
+  }
 }
 
 void MavStateEstimator::posCallback(
@@ -610,59 +625,41 @@ void MavStateEstimator::solve() {
   // Copy new factors to graph.
   auto graph = std::make_unique<gtsam::NonlinearFactorGraph>(new_graph_);
   auto values = std::make_unique<gtsam::Values>(new_values_);
+  auto stamps = std::make_unique<gtsam::FixedLagSmoother::KeyTimestampMap>(
+      new_timestamps_);
   auto time = std::make_unique<ros::Time>(idx_to_stamp_[idx_]);
   new_graph_.resize(0);
   new_values_.clear();
+  new_timestamps_.clear();
 
   // Solve.
   is_solving_.store(true);
   solver_thread_ =
       std::thread(&MavStateEstimator::solveThreaded, this, std::move(graph),
-                  std::move(values), std::move(time), idx_);
+                  std::move(values), std::move(stamps), std::move(time), idx_);
 }
 
 void MavStateEstimator::solveThreaded(
     std::unique_ptr<gtsam::NonlinearFactorGraph> graph,
-    std::unique_ptr<gtsam::Values> values, std::unique_ptr<ros::Time> time,
-    const uint64_t i) {
+    std::unique_ptr<gtsam::Values> values,
+    std::unique_ptr<gtsam::FixedLagSmoother::KeyTimestampMap> stamps,
+    std::unique_ptr<ros::Time> time, const uint64_t i) {
   assert(graph);
   assert(values);
+  assert(stamps);
   assert(time);
 
   // Solve iterative problem.
   gttic_(solveThreaded);
-  // Marginalization window
-  gtsam::FastList<gtsam::Key> window;
-  if (max_window_ > 0 && i >= static_cast<uint64_t>(max_window_)) {
-    for (auto j = next_elim_idx_; j <= (i - max_window_); ++j) {
-      window.push_back(X(j));
-      window.push_back(V(j));
-      window.push_back(B(j));
-      if (estimate_antenna_positions_) {
-        window.push_back(P(j));
-        window.push_back(A(j));
-      }
-    }
-    next_elim_idx_ = i - max_window_ + 1;
-  }
-
-  auto result = isam2_.update(*graph, *values, gtsam::FactorIndices(),
-                              boost::none, boost::none);
-  // TODO(rikba): WARNING this only works because of the simple graph structure
-  // in GNSS+IMU fusion. If we want to fuse more sensors, we have to apply the
-  // grouping and reordering according to
-  // https://github.com/borglab/gtsam/blob/5c9c4bed9306abe17cb3194fe729076605a5df24/gtsam_unstable/nonlinear/IncrementalFixedLagSmoother.cpp#L180
-  if (!window.empty()) {
-    isam2_.marginalizeLeaves(window);
-  }
-  auto pose = isam2_.calculateEstimate<gtsam::Pose3>(X(i));
-  auto velocity = isam2_.calculateEstimate<gtsam::Velocity3>(V(i));
-  auto bias = isam2_.calculateEstimate<gtsam::imuBias::ConstantBias>(B(i));
+  smoother_.update(*graph, *values, *stamps);
+  auto pose = smoother_.calculateEstimate<gtsam::Pose3>(X(i));
+  auto velocity = smoother_.calculateEstimate<gtsam::Velocity3>(V(i));
+  auto bias = smoother_.calculateEstimate<gtsam::imuBias::ConstantBias>(B(i));
   gtsam::Point3 B_t_P = B_t_P_;
   gtsam::Point3 B_t_A = B_t_A_;
   if (estimate_antenna_positions_) {
-    B_t_P = isam2_.calculateEstimate<gtsam::Point3>(P(i));
-    B_t_A = isam2_.calculateEstimate<gtsam::Point3>(A(i));
+    B_t_P = smoother_.calculateEstimate<gtsam::Point3>(P(i));
+    B_t_A = smoother_.calculateEstimate<gtsam::Point3>(A(i));
   }
   gttoc_(solveThreaded);
   gtsam::tictoc_finishedIteration_();
@@ -741,7 +738,6 @@ void MavStateEstimator::solveThreaded(
   // sprintf(buffer, "/tmp/bayes_%04d.dot", iteration++);
   // isam2_.saveGraph(buffer);
   // ROS_INFO_STREAM("Computation time " << timing_msg_.iteration);
-  // ROS_INFO_STREAM("Num relinearized " << result.getVariablesRelinearized());
 
   is_solving_.store(false);
 }

@@ -11,10 +11,10 @@
 #include <gtsam/linear/NoiseModel.h>
 #include <gtsam/navigation/CombinedImuFactor.h>
 #include <gtsam/navigation/NavState.h>
-#include <gtsam/nonlinear/ISAM2.h>
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 #include <gtsam/nonlinear/NonlinearFactor.h>
 #include <gtsam/nonlinear/Values.h>
+#include <gtsam_unstable/nonlinear/IncrementalFixedLagSmoother.h>
 #include <piksi_rtk_msgs/PositionWithCovarianceStamped.h>
 #include <ros/ros.h>
 #include <sensor_msgs/Imu.h>
@@ -74,6 +74,8 @@ class MavStateEstimator {
                       gtsam::noiseModel::Isotropic::shared_ptr* process_noise,
                       double* cov_scale);
 
+  void updateTimestampMap();
+
   void addSensorTimes(const uint16_t rate);
   bool addUnaryStamp(const ros::Time& stamp);
   gtsam::imuBias::ConstantBias getCurrentBias();
@@ -130,18 +132,16 @@ class MavStateEstimator {
   gtsam::PreintegratedCombinedMeasurements integrator_;
   sensor_msgs::Imu::ConstPtr prev_imu_;
 
-  // ISAM2
-  gtsam::ISAM2 isam2_;
+  // Optimization
+  gtsam::IncrementalFixedLagSmoother smoother_;
   gtsam::NonlinearFactorGraph new_graph_;
+  gtsam::FixedLagSmoother::KeyTimestampMap new_timestamps_;
   gtsam::Values new_values_;
   uint64_t idx_ = 0;
   std::vector<std::pair<uint64_t, gtsam::NonlinearFactor::shared_ptr>>
       new_unary_factors_;
   gtsam::NavState prev_state_;
   gtsam::imuBias::ConstantBias prev_bias_;
-  int max_window_ = -1;
-  gtsam::FastList<gtsam::Key> no_relin_keys_;
-  uint64_t next_elim_idx_ = 0;
 
   // Batch
   std::mutex batch_mtx_;
@@ -166,9 +166,11 @@ class MavStateEstimator {
 
   void solve();
 
-  void solveThreaded(std::unique_ptr<gtsam::NonlinearFactorGraph> graph,
-                     std::unique_ptr<gtsam::Values> values,
-                     std::unique_ptr<ros::Time> time, const uint64_t i);
+  void solveThreaded(
+      std::unique_ptr<gtsam::NonlinearFactorGraph> graph,
+      std::unique_ptr<gtsam::Values> values,
+      std::unique_ptr<gtsam::FixedLagSmoother::KeyTimestampMap> stamps,
+      std::unique_ptr<ros::Time> time, const uint64_t i);
 };
 
 }  // namespace mav_state_estimation

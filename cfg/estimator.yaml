@@ -42,6 +42,6 @@ isam2:
   relinearize_threshold_antenna_calibration: 0.01 # m
   relinearize_skip: 1
   enable_partial_relinarization_check: False
-  max_window: 300
+  smoother_lag: 10.0 # s WARNING: This time needs to be greater than any imaginable sensor arrival delay
 
 external_poses: ["a1", "a2", "a3", "a4", "bfly", "FLU"]

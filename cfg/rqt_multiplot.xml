@@ -2651,7 +2651,7 @@
                         <curve_0>
                             <axes>
                                 <x_axis>
-                                    <field>pose/pose/position/x</field>
+                                    <field>transform/translation/x</field>
                                     <field_type>0</field_type>
                                     <scale>
                                         <absolute_maximum>1000</absolute_maximum>
@@ -2660,11 +2660,11 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/moa/mav_state_estimator/odometry</topic>
-                                    <type>nav_msgs/Odometry</type>
+                                    <topic>/moa/mav_state_estimator/prediction</topic>
+                                    <type>geometry_msgs/TransformStamped</type>
                                 </x_axis>
                                 <y_axis>
-                                    <field>pose/pose/position/y</field>
+                                    <field>transform/translation/y</field>
                                     <field_type>0</field_type>
                                     <scale>
                                         <absolute_maximum>1000</absolute_maximum>
@@ -2673,8 +2673,8 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/moa/mav_state_estimator/odometry</topic>
-                                    <type>nav_msgs/Odometry</type>
+                                    <topic>/moa/mav_state_estimator/prediction</topic>
+                                    <type>geometry_msgs/TransformStamped</type>
                                 </y_axis>
                             </axes>
                             <color>
@@ -2697,7 +2697,7 @@
                                 <type>0</type>
                             </style>
                             <subscriber_queue_size>100</subscriber_queue_size>
-                            <title>Odometry</title>
+                            <title>Prediction</title>
                         </curve_0>
                     </curves>
                     <legend>

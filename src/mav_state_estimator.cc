@@ -539,8 +539,9 @@ void MavStateEstimator::publishOdometry(
     msg.twist.twist.angular = tf2::toMsg(
         tf2::quatRotate(tf2_T_BF.getRotation().inverse(), tf_omega_B));
   } catch (...) {
-    ROS_ERROR_ONCE("No odometry. Cannot lookup T_BF from B: %s F: %s",
-                   base_frame_.c_str(), msg.child_frame_id.c_str());
+    ROS_WARN_THROTTLE(10.0,
+                      "No odometry. Cannot lookup T_BF from B: %s to F: %s",
+                      base_frame_.c_str(), msg.child_frame_id.c_str());
   }
 
   odometry_pub_.publish(msg);

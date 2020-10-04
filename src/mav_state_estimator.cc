@@ -184,9 +184,10 @@ void MavStateEstimator::loadGnssParams(
   // General GNSS parameters.
   *B_t = getVectorFromParams(antenna_ns + "/B_t");
   ROS_INFO_STREAM("Initial guess " << antenna_ns.c_str()
-                                   << "location: " << B_t->transpose());
+                                   << " location: " << B_t->transpose());
   int rate = 0;
   nh_private_.getParam(antenna_ns + "/rate", rate);
+  ROS_INFO_STREAM(antenna_ns.c_str() << " rate: " << rate << " Hz");
   addSensorTimes(rate);
   nh_private_.getParam(antenna_ns + "/scale_cov", *cov_scale);
   ROS_INFO_STREAM(antenna_ns.c_str() << " cov scale: " << *cov_scale);
@@ -653,6 +654,7 @@ void MavStateEstimator::solveThreaded(
   // Solve iterative problem.
   gttic_(solveThreaded);
   smoother_.update(*graph, *values, *stamps);
+
   auto pose = smoother_.calculateEstimate<gtsam::Pose3>(X(i));
   auto velocity = smoother_.calculateEstimate<gtsam::Velocity3>(V(i));
   auto bias = smoother_.calculateEstimate<gtsam::imuBias::ConstantBias>(B(i));

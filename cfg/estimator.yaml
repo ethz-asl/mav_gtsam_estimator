@@ -1,17 +1,17 @@
 prior_noise_rot_IB: [0.05, 0.05, 0.05]
-prior_noise_I_t_B: [0.2, 0.2, 0.2]
-prior_noise_I_v_B: [0.05, 0.05, 0.05]
-prior_noise_gyro_bias: [1.0e-2, 1.0e-2, 1.0e-2]
-prior_noise_acc_bias: [1.0e-1, 1.0e-1, 1.0e-1]
+prior_noise_I_t_B: [0.1, 0.1, 0.1]
+prior_noise_I_v_B: [0.001, 0.001, 0.001]
+prior_noise_gyro_bias: [1.0e-3, 1.0e-3, 1.0e-3]
+prior_noise_acc_bias: [5.0e-2, 5.0e-2, 5.0e-2]
 prior_acc_bias: [0.0, 0.0, 0.0]
 prior_gyro_bias: [0.0, 0.0, 0.0]
 
-bias_acc_sigma: 0.00008
-bias_omega_sigma: 0.00005
+bias_acc_sigma: 0.0002
+bias_omega_sigma: 4.0e-06
 bias_acc_int_sigma: 1.0e-5
 bias_omega_int_sigma: 1.0e-5
-acc_sigma: 3.0e-5
-gyro_sigma: 2.0e-6
+acc_sigma: 0.1
+gyro_sigma: 0.005
 integration_sigma: 1.0e-7
 use_2nd_order_coriolis: false
 
@@ -22,7 +22,7 @@ position_receiver:
   B_t: [0.139, 0.205, 0.340]
   prior_noise_B_t: 0.01
   process_noise_B_t: 1.0e-6
-  scale_cov: 1.0e2
+  scale_cov: 10.0
   rate: 10
 
 attitude_receiver:
@@ -30,7 +30,7 @@ attitude_receiver:
   B_t: [0.139, -0.195, 0.340]
   prior_noise_B_t: 0.01
   process_noise_B_t: 1.0e-6
-  scale_cov: 1.0e1
+  scale_cov: 10.0
   rate: 5
 
 isam2:

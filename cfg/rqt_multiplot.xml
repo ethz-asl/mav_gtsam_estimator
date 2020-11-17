@@ -211,7 +211,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/moa/adis16448bmlz/imu/data_raw</topic>
+                                    <topic>/moa/adis16448bmlz/imu</topic>
                                     <type>sensor_msgs/Imu</type>
                                 </x_axis>
                                 <y_axis>
@@ -224,7 +224,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/moa/adis16448bmlz/imu/data_raw</topic>
+                                    <topic>/moa/adis16448bmlz/imu</topic>
                                     <type>sensor_msgs/Imu</type>
                                 </y_axis>
                             </axes>
@@ -262,7 +262,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/moa/adis16448bmlz/imu/data_raw</topic>
+                                    <topic>/moa/adis16448bmlz/imu</topic>
                                     <type>sensor_msgs/Imu</type>
                                 </x_axis>
                                 <y_axis>
@@ -275,7 +275,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/moa/adis16448bmlz/imu/data_raw</topic>
+                                    <topic>/moa/adis16448bmlz/imu</topic>
                                     <type>sensor_msgs/Imu</type>
                                 </y_axis>
                             </axes>
@@ -313,7 +313,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/moa/adis16448bmlz/imu/data_raw</topic>
+                                    <topic>/moa/adis16448bmlz/imu</topic>
                                     <type>sensor_msgs/Imu</type>
                                 </x_axis>
                                 <y_axis>
@@ -326,7 +326,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/moa/adis16448bmlz/imu/data_raw</topic>
+                                    <topic>/moa/adis16448bmlz/imu</topic>
                                     <type>sensor_msgs/Imu</type>
                                 </y_axis>
                             </axes>
@@ -894,7 +894,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/moa/adis16448bmlz/imu/data_raw</topic>
+                                    <topic>/moa/adis16448bmlz/imu</topic>
                                     <type>sensor_msgs/Imu</type>
                                 </x_axis>
                                 <y_axis>
@@ -907,7 +907,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/moa/adis16448bmlz/imu/data_raw</topic>
+                                    <topic>/moa/adis16448bmlz/imu</topic>
                                     <type>sensor_msgs/Imu</type>
                                 </y_axis>
                             </axes>
@@ -945,7 +945,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/moa/adis16448bmlz/imu/data_raw</topic>
+                                    <topic>/moa/adis16448bmlz/imu</topic>
                                     <type>sensor_msgs/Imu</type>
                                 </x_axis>
                                 <y_axis>
@@ -958,7 +958,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/moa/adis16448bmlz/imu/data_raw</topic>
+                                    <topic>/moa/adis16448bmlz/imu</topic>
                                     <type>sensor_msgs/Imu</type>
                                 </y_axis>
                             </axes>
@@ -996,7 +996,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/moa/adis16448bmlz/imu/data_raw</topic>
+                                    <topic>/moa/adis16448bmlz/imu</topic>
                                     <type>sensor_msgs/Imu</type>
                                 </x_axis>
                                 <y_axis>
@@ -1009,7 +1009,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>0</type>
                                     </scale>
-                                    <topic>/moa/adis16448bmlz/imu/data_raw</topic>
+                                    <topic>/moa/adis16448bmlz/imu</topic>
                                     <type>sensor_msgs/Imu</type>
                                 </y_axis>
                             </axes>

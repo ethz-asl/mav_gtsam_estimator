@@ -364,6 +364,8 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     }
   } else {
     ROS_ERROR("Cannot handle IMU message.");
+    ROS_ERROR_STREAM("This IMU stamp: " << imu_msg->header.stamp);
+    ROS_ERROR_STREAM("Prev IMU stamp: " << prev_imu_->header.stamp);
   }
   prev_imu_ = imu_msg;
   batch_imu_.push_back(imu_msg);

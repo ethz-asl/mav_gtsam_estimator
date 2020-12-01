@@ -384,6 +384,8 @@ void MavStateEstimator::updateTimestampMap() {
 
 void MavStateEstimator::posCallback(
     const piksi_rtk_msgs::PositionWithCovarianceStamped::ConstPtr& pos_msg) {
+  static piksi_rtk_msgs::PositionWithCovarianceStamped::ConstPtr prev_msg =
+      nullptr;
   // Do not update factors while initial values are updated.
   std::unique_lock<std::recursive_mutex> lock(update_mtx_);
   ROS_INFO_ONCE("Received first POS message.");
@@ -395,10 +397,11 @@ void MavStateEstimator::posCallback(
     ROS_INFO_ONCE("Inertial frame: %s", inertial_frame_.c_str());
     init_.setInertialFrame(inertial_frame_);
     init_.addPositionConstraint(I_t_P, B_t_P_, pos_msg->header.stamp);
-  } else if (addUnaryStamp(pos_msg->header.stamp)) {
+  } else if (addUnaryStamp(pos_msg->header.stamp) && prev_msg) {
     const bool kSmart = false;
     auto cov = gtsam::noiseModel::Gaussian::Covariance(
-        pos_receiver_cov_scale_ *
+        pos_receiver_cov_scale_ /
+            (pos_msg->header.stamp - prev_msg->header.stamp).toSec() *
             Matrix3dRow::Map(pos_msg->position.covariance.data()),
         kSmart);
     gtsam::NonlinearFactor::shared_ptr pos_factor;
@@ -416,6 +419,7 @@ void MavStateEstimator::posCallback(
   } else {
     ROS_WARN("Failed to add unary position factor.");
   }
+  prev_msg = pos_msg;
 }
 
 bool MavStateEstimator::addUnaryStamp(const ros::Time& stamp) {
@@ -458,6 +462,8 @@ bool MavStateEstimator::addUnaryStamp(const ros::Time& stamp) {
 void MavStateEstimator::baselineCallback(
     const piksi_rtk_msgs::PositionWithCovarianceStamped::ConstPtr&
         baseline_msg) {
+  static piksi_rtk_msgs::PositionWithCovarianceStamped::ConstPtr prev_msg =
+      nullptr;
   // Do not update factors while initial values are updated.
   std::unique_lock<std::recursive_mutex> lock(update_mtx_);
   ROS_INFO_ONCE("Received first BASELINE message.");
@@ -474,9 +480,10 @@ void MavStateEstimator::baselineCallback(
   const Eigen::Vector3d B_t_PA = B_t_A_ - B_t_P_;
   if (!isInitialized()) {
     init_.addOrientationConstraint2(I_t_PA, B_t_PA, baseline_msg->header.stamp);
-  } else if (addUnaryStamp(baseline_msg->header.stamp)) {
+  } else if (addUnaryStamp(baseline_msg->header.stamp) && prev_msg) {
     auto cov = gtsam::noiseModel::Gaussian::Covariance(
-        R_ENU_NED * att_receiver_cov_scale_ *
+        R_ENU_NED * att_receiver_cov_scale_ /
+        (baseline_msg->header.stamp - prev_msg->header.stamp).toSec() *
         Matrix3dRow::Map(baseline_msg->position.covariance.data()) *
         R_ENU_NED.transpose());
     gtsam::NonlinearFactor::shared_ptr baseline_factor;
@@ -495,6 +502,7 @@ void MavStateEstimator::baselineCallback(
   } else {
     ROS_WARN("Failed to add unary baseline factor.");
   }
+  prev_msg = baseline_msg;
 }
 
 void MavStateEstimator::publishOdometry(
@@ -918,6 +926,7 @@ void MavStateEstimator::solveBatch(
 
             tf2_msgs::TFMessage tfmsg;
             tfmsg.transforms.push_back(T_IE);
+            // TODO(rikba): This seems to overwrite previous TF poses.
             bag.write("/tf", T_IE.header.stamp, tfmsg);
           } catch (const rosbag::BagIOException& e) {
             ROS_WARN_ONCE("Cannot write batch pose %s to bag: %s",

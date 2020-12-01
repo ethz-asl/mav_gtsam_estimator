@@ -31,7 +31,7 @@
     <node pkg="tf2_ros" type="static_transform_publisher" name="a4_broadcaster" args="0 0 0 1.57079632679 0 0 a4_tilt a4"/>
     <!-- vertical polarization -->
 
-    <node pkg="tf2_ros" type="static_transform_publisher" name="bfly_broadcaster" args="0.1234326366277812 -0.04622078817450226 -0.08869720309341964 0.70462038 0.70957151 0.00153975 0.00400233 adis16448bmlz bfly"/>
+    <node pkg="tf2_ros" type="static_transform_publisher" name="bfly_broadcaster" args="0.04677062 -0.12240747 -0.08982255 0.70462038 0.70957151 0.00153975 -0.00400233 adis16448bmlz bfly"/>
 
     <!-- Start rosbag -->
     <group if="$(arg replay_bag)">

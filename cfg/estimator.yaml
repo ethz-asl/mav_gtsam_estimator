@@ -19,7 +19,7 @@ estimate_antenna_positions: false
 
 position_receiver:
   # (Initial) extrinsic calibration
-  B_t: [0.139, 0.205, 0.341]
+  B_t: [0.137, 0.205, 0.341]
   prior_noise_B_t: 0.01
   process_noise_B_t: 1.0e-6
   scale_cov: 10.0
@@ -27,7 +27,7 @@ position_receiver:
 
 attitude_receiver:
   # (Initial) extrinsic calibration IMU frame
-  B_t: [0.139, -0.195, 0.341]
+  B_t: [0.137, -0.195, 0.341]
   prior_noise_B_t: 0.01
   process_noise_B_t: 1.0e-6
   scale_cov: 10.0

@@ -16,7 +16,7 @@ Panels:
         - /Odometry1/Shape1
         - /Odometry1/Covariance1/Position1
       Splitter Ratio: 0.5
-    Tree Height: 732
+    Tree Height: 363
   - Class: rviz/Selection
     Name: Selection
   - Class: rviz/Tool Properties
@@ -65,7 +65,11 @@ Visualization Manager:
       Enabled: true
       Frame Timeout: 100
       Frames:
+        AGL:
+          Value: true
         All Enabled: false
+        FLU:
+          Value: true
         a1:
           Value: true
         a1_intermediate:
@@ -92,13 +96,17 @@ Visualization Manager:
           Value: false
         adis16448bmlz:
           Value: true
-        adis16448bmlz_flu:
-          Value: true
         adis16448bmlz_optimization:
           Value: false
         bfly:
           Value: true
         enu:
+          Value: true
+        ground_ENU:
+          Value: true
+        local:
+          Value: true
+        map:
           Value: true
       Marker Scale: 0.699999988079071
       Name: TF
@@ -108,6 +116,8 @@ Visualization Manager:
       Tree:
         enu:
           adis16448bmlz:
+            FLU:
+              {}
             a1_intermediate:
               a1_tilt:
                 a1:
@@ -124,8 +134,6 @@ Visualization Manager:
               a4_tilt:
                 a4:
                   {}
-            adis16448bmlz_flu:
-              {}
             bfly:
               {}
           adis16448bmlz_optimization:
@@ -271,25 +279,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/ThirdPersonFollower
-      Distance: 7.598544120788574
+      Distance: 1.4073991775512695
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -0.3069273829460144
-        Y: -1.0078397989273071
-        Z: 5.960464477539063e-8
+        X: 10.034563064575195
+        Y: -0.42335033416748047
+        Z: -6.556510925292969e-7
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.27039819955825806
+      Pitch: 1.3747965097427368
       Target Frame: adis16448bmlz_flu
       Value: ThirdPersonFollower (rviz)
-      Yaw: 5.418583393096924
+      Yaw: 5.168603420257568
     Saved: ~
 Window Geometry:
   Displays:

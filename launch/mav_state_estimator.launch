@@ -11,27 +11,27 @@
     <!-- External markers -->
     <node pkg="tf2_ros" type="static_transform_publisher" name="flu_broadcaster" args="0 0 0 3.14159265359 0 0 adis16448bmlz FLU"/>
 
-    <node pkg="tf2_ros" type="static_transform_publisher" name="a1_intermediate_broadcaster" args="-0.117 -0.048 -0.010 3.14159265359 0 0 adis16448bmlz a1_intermediate"/>
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a1_intermediate_broadcaster" args="-0.153 -0.057 -0.015 3.14159265359 0 0 adis16448bmlz a1_intermediate"/>
     <node pkg="tf2_ros" type="static_transform_publisher" name="a1_tilt_broadcaster" args="0 0 0 0 0 -2.35619449019 a1_intermediate a1_tilt"/>
     <node pkg="tf2_ros" type="static_transform_publisher" name="a1_broadcaster" args="0 0 0 0 0 0  a1_tilt a1"/>
     <!-- horizontal polarization -->
 
-    <node pkg="tf2_ros" type="static_transform_publisher" name="a2_intermediate_broadcaster" args="0.395, -0.048, -0.010 3.14159265359 0 0 adis16448bmlz a2_intermediate"/>
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a2_intermediate_broadcaster" args="0.359, -0.057, -0.015 3.14159265359 0 0 adis16448bmlz a2_intermediate"/>
     <node pkg="tf2_ros" type="static_transform_publisher" name="a2_tilt_broadcaster" args="0 0 0 0 0 -2.35619449019 a2_intermediate a2_tilt"/>
     <node pkg="tf2_ros" type="static_transform_publisher" name="a2_broadcaster" args="0 0 0 0 0 0  a2_tilt a2"/>
     <!-- horizontal polarization -->
 
-    <node pkg="tf2_ros" type="static_transform_publisher" name="a3_intermediate_broadcaster" args="-0.117, 0.109, -0.166 3.14159265359 0 0 adis16448bmlz a3_intermediate"/>
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a3_intermediate_broadcaster" args="-0.153, 0.100, -0.171 3.14159265359 0 0 adis16448bmlz a3_intermediate"/>
     <node pkg="tf2_ros" type="static_transform_publisher" name="a3_tilt_broadcaster" args="0 0 0 0 0 -2.35619449019 a3_intermediate a3_tilt"/>
     <node pkg="tf2_ros" type="static_transform_publisher" name="a3_broadcaster" args="0 0 0 1.57079632679 0 0 a3_tilt a3"/>
     <!-- vertical polarization -->
 
-    <node pkg="tf2_ros" type="static_transform_publisher" name="a4_intermediate_broadcaster" args="0.395, 0.109, -0.166 3.14159265359 0 0 adis16448bmlz a4_intermediate"/>
+    <node pkg="tf2_ros" type="static_transform_publisher" name="a4_intermediate_broadcaster" args="0.359, 0.100, -0.171 3.14159265359 0 0 adis16448bmlz a4_intermediate"/>
     <node pkg="tf2_ros" type="static_transform_publisher" name="a4_tilt_broadcaster" args="0 0 0 0 0 -2.35619449019 a4_intermediate a4_tilt"/>
     <node pkg="tf2_ros" type="static_transform_publisher" name="a4_broadcaster" args="0 0 0 1.57079632679 0 0 a4_tilt a4"/>
     <!-- vertical polarization -->
 
-    <node pkg="tf2_ros" type="static_transform_publisher" name="bfly_broadcaster" args="0.04677062 -0.12240747 -0.08982255 0.70462038 0.70957151 0.00153975 -0.00400233 adis16448bmlz bfly"/>
+    <node pkg="tf2_ros" type="static_transform_publisher" name="bfly_broadcaster" args="0.0463 -0.1181 -0.0932 0.704297 0.709898 0.002081 -0.002472 adis16448bmlz bfly"/>
 
     <!-- Start rosbag -->
     <group if="$(arg replay_bag)">

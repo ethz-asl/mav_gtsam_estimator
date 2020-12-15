@@ -886,12 +886,11 @@ void MavStateEstimator::solveBatch(
         geometry_msgs::TransformStamped T_IB =
             getTransform(imu_state, (*imu)->header.stamp, base_frame_);
         batch_pub.publish(T_IB);
+        tf2_msgs::TFMessage tfmsg;
         try {
           bag.write(kTfTopic, T_IB.header.stamp, T_IB);
 
-          tf2_msgs::TFMessage tfmsg;
           tfmsg.transforms.push_back(T_IB);
-          bag.write("/tf", T_IB.header.stamp, tfmsg);
         } catch (const rosbag::BagIOException& e) {
           ROS_WARN_ONCE("Cannot write batch pose to bag: %s", e.what());
         } catch (const rosbag::BagException& e) {
@@ -924,10 +923,7 @@ void MavStateEstimator::solveBatch(
           try {
             bag.write(frame, T_IE.header.stamp, T_IE);
 
-            tf2_msgs::TFMessage tfmsg;
             tfmsg.transforms.push_back(T_IE);
-            // TODO(rikba): This seems to overwrite previous TF poses.
-            bag.write("/tf", T_IE.header.stamp, tfmsg);
           } catch (const rosbag::BagIOException& e) {
             ROS_WARN_ONCE("Cannot write batch pose %s to bag: %s",
                           frame.c_str(), e.what());
@@ -935,6 +931,7 @@ void MavStateEstimator::solveBatch(
             ROS_WARN("Cannot write batch pose %s: %s", frame.c_str(), e.what());
           }
         }
+        bag.write("/tf", T_IB.header.stamp, tfmsg);
 
         ros::spinOnce();
       }

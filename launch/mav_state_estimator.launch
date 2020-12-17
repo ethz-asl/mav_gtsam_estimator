@@ -7,10 +7,11 @@
   <arg name="visualize" default="false"/>
   <arg name="output" default="screen"/>
   <arg name="run_estimator" default="true"/>
+  <arg name="publish_all_tf" default="true"/>
   <arg name="euler" default="true"/>
 
   <group ns="$(arg mav_name)">
-    <group if="$(arg run_estimator)">
+    <group if="$(arg publish_all_tf)">
       <!-- External markers -->
       <node pkg="tf2_ros" type="static_transform_publisher" name="flu_broadcaster" args="0 0 0 3.14159265359 0 0 adis16448bmlz FLU"/>
 

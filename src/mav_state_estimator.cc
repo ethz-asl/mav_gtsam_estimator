@@ -27,8 +27,9 @@ typedef Eigen::Matrix<double, 3, 3, Eigen::RowMajor> Matrix3dRow;
 
 namespace mav_state_estimation {
 
-MavStateEstimator::MavStateEstimator()
-    : nh_(ros::NodeHandle()), nh_private_(ros::NodeHandle("~")) {
+MavStateEstimator::MavStateEstimator(const ros::NodeHandle& nh,
+                                     const ros::NodeHandle& nh_private)
+    : nh_(nh), nh_private_(nh_private) {
   // Get parameters.
   nh_private_.getParam("external_poses", external_poses_);
 

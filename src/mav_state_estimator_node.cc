@@ -4,7 +4,9 @@
 
 int main(int argc, char** argv) {
   ros::init(argc, argv, "mav_state_estimator");
-  mav_state_estimation::MavStateEstimator estimator;
+  ros::NodeHandle nh;
+  ros::NodeHandle nh_private("~");
+  mav_state_estimation::MavStateEstimator estimator(nh, nh_private);
   ros::spin();
   return 0;
 }

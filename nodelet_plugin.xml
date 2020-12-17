@@ -1,0 +1,7 @@
+<library path="lib/libmav_state_estimation_nodelet">
+  <class name="mav_state_estimation/MavStateEstimatorNodelet" type="mav_state_estimation::MavStateEstimatorNodelet" base_class_type="nodelet::Nodelet">
+    <description>
+      This is the MAV state estimator nodelet.
+    </description>
+  </class>
+</library>

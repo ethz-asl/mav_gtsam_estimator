@@ -32,7 +32,8 @@ namespace mav_state_estimation {
 
 class MavStateEstimator {
  public:
-  MavStateEstimator();
+  MavStateEstimator(const ros::NodeHandle& nh,
+                    const ros::NodeHandle& nh_private);
   ~MavStateEstimator();
 
  private:

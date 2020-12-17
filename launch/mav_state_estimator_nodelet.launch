@@ -1,0 +1,7 @@
+<!-- Minimum example -->
+<launch>
+
+    <node pkg="nodelet" type="nodelet" name="mav_state_estimation_nodelet_manager" args="manager" cwd="node" output="screen"/>
+    <node pkg="nodelet" type="nodelet" name="mav_state_estimator_nodelet" args="load mav_state_estimation/MavStateEstimatorNodelet mav_state_estimation_nodelet_manager"/>
+
+</launch>

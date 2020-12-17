@@ -947,10 +947,3 @@ void MavStateEstimator::solveBatch(
 }
 
 }  // namespace mav_state_estimation
-
-int main(int argc, char** argv) {
-  ros::init(argc, argv, "mav_state_estimator");
-  mav_state_estimation::MavStateEstimator estimator;
-  ros::spin();
-  return 0;
-}

@@ -38,7 +38,7 @@ target_link_libraries(test_moving_baseline_factor ${PROJECT_NAME})
 ############
 # BINARIES #
 ############
-cs_add_executable(mav_state_estimator src/mav_state_estimator.cc)
+cs_add_executable(mav_state_estimator src/mav_state_estimator_node.cc)
 target_link_libraries(mav_state_estimator ${PROJECT_NAME})
 
 cs_install()

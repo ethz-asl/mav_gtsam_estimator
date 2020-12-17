@@ -14,13 +14,14 @@ find_package(Eigen3 REQUIRED)
 #############
 # LIBRARIES #
 #############
-cs_add_library(${PROJECT_NAME}
+cs_add_library(${PROJECT_NAME}_nodelet
   src/absolute_position_factor.cc
   src/initialization.cc
   src/mav_state_estimator.cc
+  src/mav_state_estimator_nodelet.cc
   src/moving_baseline_factor.cc
 )
-target_link_libraries(${PROJECT_NAME} gtsam gtsam_unstable)
+target_link_libraries(${PROJECT_NAME}_nodelet gtsam gtsam_unstable)
 
 #########
 # TESTS #
@@ -28,18 +29,18 @@ target_link_libraries(${PROJECT_NAME} gtsam gtsam_unstable)
 catkin_add_gtest(test_absolute_position_factor
   test/absolute_position_factor-test.cc
 )
-target_link_libraries(test_absolute_position_factor ${PROJECT_NAME})
+target_link_libraries(test_absolute_position_factor ${PROJECT_NAME}_nodelet)
 
 catkin_add_gtest(test_moving_baseline_factor
   test/moving_baseline_factor-test.cc
 )
-target_link_libraries(test_moving_baseline_factor ${PROJECT_NAME})
+target_link_libraries(test_moving_baseline_factor ${PROJECT_NAME}_nodelet)
 
 ############
 # BINARIES #
 ############
-cs_add_executable(mav_state_estimator src/mav_state_estimator.cc)
-target_link_libraries(mav_state_estimator ${PROJECT_NAME})
+cs_add_executable(mav_state_estimator src/mav_state_estimator_node.cc)
+target_link_libraries(mav_state_estimator ${PROJECT_NAME}_nodelet)
 
 cs_install()
 cs_export()

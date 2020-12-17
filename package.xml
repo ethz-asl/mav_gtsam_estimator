@@ -24,7 +24,12 @@
   <depend>tf2_msgs</depend>
   <depend>std_msgs</depend>
   <depend>rosbag</depend>
+  <depend>nodelet</depend>
 
   <depend>message_generation</depend>
   <depend>message_runtime</depend>
+
+  <export>
+    <nodelet plugin="${prefix}/nodelet_plugin.xml" />
+  </export>
 </package>

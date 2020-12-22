@@ -13,7 +13,7 @@ bias_omega_int_sigma: 1.0e-5
 acc_sigma: 3.0
 gyro_sigma: 0.1
 integration_sigma: 1.0e-7
-use_2nd_order_coriolis: false
+use_2nd_order_coriolis: true
 
 estimate_antenna_positions: false
 

@@ -10,8 +10,8 @@ bias_acc_sigma: 0.0002
 bias_omega_sigma: 4.0e-06
 bias_acc_int_sigma: 1.0e-5
 bias_omega_int_sigma: 1.0e-5
-acc_sigma: 3.0
-gyro_sigma: 0.1
+acc_sigma: 0.01
+gyro_sigma: 0.005
 integration_sigma: 1.0e-7
 use_2nd_order_coriolis: true
 

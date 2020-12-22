@@ -293,10 +293,11 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
   ROS_INFO_ONCE("Received first IMU message.");
   if (!isInitialized()) {
     // Gravitational acceleration in inertial frame (ENU).
-    Eigen::Vector3d I_g(0, 0, -9.81);
+    Eigen::Vector3d I_g = integrator_.p().getGravity();
     // Gravitational acceleration in base frame (IMU).
     Eigen::Vector3d B_g;
     tf::vectorMsgToEigen(imu_msg->linear_acceleration, B_g);
+    B_g = prev_bias_.correctAccelerometer(B_g);
     B_g *= -1.0;
     base_frame_ = imu_msg->header.frame_id;
     ROS_INFO_ONCE("Base frame: %s", base_frame_.c_str());

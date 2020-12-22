@@ -1,8 +1,8 @@
 prior_noise_rot_IB: [0.05, 0.05, 0.05]
 prior_noise_I_t_B: [0.1, 0.1, 0.1]
 prior_noise_I_v_B: [0.001, 0.001, 0.001]
-prior_noise_gyro_bias: [1.0e-3, 1.0e-3, 1.0e-3]
-prior_noise_acc_bias: [5.0e-2, 5.0e-2, 5.0e-2]
+prior_noise_gyro_bias: [8.0e-3, 8.0e-3, 8.0e-3]
+prior_noise_acc_bias: [1.0e-1, 1.0e-1, 1.0e-1]
 prior_acc_bias: [0.0, 0.0, 0.0]
 prior_gyro_bias: [0.0, 0.0, 0.0]
 

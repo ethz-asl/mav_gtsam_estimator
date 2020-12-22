@@ -31,6 +31,24 @@ TEST(AbsolutePositionFactor, Error) {
   EXPECT_TRUE(assert_equal(expected_error, actual_error2, 1e-5));
 }
 
+TEST(AbsolutePositionFactor, ErrorHeading) {
+  Rot3 R = Rot3::rodriguez(Unit3(0.0, 0.0, 1.0), M_PI);
+  Point3 t(1.0, 0.5, 0.2);
+  Pose3 pose(R, t);
+  Point3 B_t_P(10.0, 0.0, 0.0);
+  Point3 I_t_P_measured(-9.0, 0.5, 0.2);
+
+  AbsolutePositionFactor1 factor1(X(1), I_t_P_measured, B_t_P,
+                                  noiseModel::Isotropic::Sigma(3, 0.05));
+  AbsolutePositionFactor2 factor2(X(1), P(1), I_t_P_measured,
+                                  noiseModel::Isotropic::Sigma(3, 0.05));
+  Vector expected_error = (Vector(3) << 0.0, 0.0, 0.0).finished();
+  Vector actual_error1 = factor1.evaluateError(pose);
+  Vector actual_error2 = factor2.evaluateError(pose, B_t_P);
+  EXPECT_TRUE(assert_equal(expected_error, actual_error1, 1e-5));
+  EXPECT_TRUE(assert_equal(expected_error, actual_error2, 1e-5));
+}
+
 TEST(AbsolutePositionFactor, Jacobian) {
   Rot3 R = Rot3::rodriguez(0.1, 0.2, 0.3);
   Point3 t(1.0, 0.5, 0.2);

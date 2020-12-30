@@ -5,7 +5,8 @@ prior_noise_I_v_B: [0.01, 0.01, 0.01]
 prior_noise_gyro_bias: [1.7e-4, 1.7e-4, 1.7e-4]
 # Acc bias repeatability from data sheet
 prior_noise_acc_bias: [2.0e-1, 2.0e-1, 2.0e-1]
-prior_acc_bias: [0.11, 0.06, 0.00]
+#prior_acc_bias: [0.11, 0.06, 0.00]
+prior_acc_bias: [0.0, 0.0, 0.0]
 prior_gyro_bias: [0.0, 0.0, 0.0]
 
 # IMU params from J. Rehder: Extending kalibr: Calibrating the Extrinsics of Multiple IMUs and of Individual Axes, Table II

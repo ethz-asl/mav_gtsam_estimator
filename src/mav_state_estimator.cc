@@ -309,10 +309,10 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     // TODO(rikba): Linearly inpterpolate IMU message.
     auto in_between_imu = boost::make_shared<sensor_msgs::Imu>(*prev_imu_);
     in_between_imu->header.stamp = idx_to_stamp_[idx_ + 1];
-    ROS_WARN_STREAM("Inserting missing IMU message at "
+    ROS_DEBUG_STREAM("Inserting missing IMU message at "
                     << in_between_imu->header.stamp);
-    ROS_WARN_STREAM("Prev IMU stamp: " << prev_imu_->header.stamp);
-    ROS_WARN_STREAM("This IMU stamp: " << imu_msg->header.stamp);
+    ROS_DEBUG_STREAM("Prev IMU stamp: " << prev_imu_->header.stamp);
+    ROS_DEBUG_STREAM("This IMU stamp: " << imu_msg->header.stamp);
     imuCallback(in_between_imu);
   } else if (imu_msg->header.stamp > prev_imu_->header.stamp) {
     // Integrate IMU (zero-order-hold).

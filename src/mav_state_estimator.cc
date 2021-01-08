@@ -32,6 +32,7 @@ MavStateEstimator::MavStateEstimator(const ros::NodeHandle& nh,
     : nh_(nh), nh_private_(nh_private) {
   // Get parameters.
   nh_private_.getParam("external_poses", external_poses_);
+  nh_private_.getParam("odometry_throttle", odometry_throttle_);
 
   // GNSS
   nh_private_.getParam("estimate_antenna_positions",
@@ -324,12 +325,14 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
 
     // Publish high rate IMU prediction.
     auto imu_state = integrator_.predict(prev_state_, prev_bias_);
-    geometry_msgs::TransformStamped T_IB =
-        getTransform(imu_state, imu_msg->header.stamp, base_frame_);
-    tfb_.sendTransform(T_IB);
-    prediction_pub_.publish(T_IB);
-    publishOdometry(imu_state.velocity(), ang_vel, prev_bias_,
-                    imu_msg->header.stamp, T_IB);
+    if ((imu_msg->header.seq % odometry_throttle_) == 0) {
+      geometry_msgs::TransformStamped T_IB =
+          getTransform(imu_state, imu_msg->header.stamp, base_frame_);
+      tfb_.sendTransform(T_IB);
+      prediction_pub_.publish(T_IB);
+      publishOdometry(imu_state.velocity(), ang_vel, prev_bias_,
+                      imu_msg->header.stamp, T_IB);
+    }
 
     // Setup new inbetween IMU factor.
     if (addUnaryStamp(imu_msg->header.stamp)) {

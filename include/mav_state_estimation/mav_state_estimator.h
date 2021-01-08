@@ -95,6 +95,7 @@ class MavStateEstimator {
 
   ros::Publisher timing_pub_;
   mav_state_estimation::Timing timing_msg_;
+  int odometry_throttle_ = 1;
 
   ros::Publisher prediction_pub_;
   ros::Publisher optimization_pub_;

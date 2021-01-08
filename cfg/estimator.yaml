@@ -38,7 +38,7 @@ attitude_receiver:
   B_t: [0.110, -0.204, 0.336]
   prior_noise_B_t: 0.01
   process_noise_B_t: 1.0e-5
-  scale_cov: 1.0
+  scale_cov: 2.0
   rate: 5
 
 isam2:

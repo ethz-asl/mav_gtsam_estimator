@@ -310,7 +310,7 @@ void MavStateEstimator::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg) {
     auto in_between_imu = boost::make_shared<sensor_msgs::Imu>(*prev_imu_);
     in_between_imu->header.stamp = idx_to_stamp_[idx_ + 1];
     ROS_DEBUG_STREAM("Inserting missing IMU message at "
-                    << in_between_imu->header.stamp);
+                     << in_between_imu->header.stamp);
     ROS_DEBUG_STREAM("Prev IMU stamp: " << prev_imu_->header.stamp);
     ROS_DEBUG_STREAM("This IMU stamp: " << imu_msg->header.stamp);
     imuCallback(in_between_imu);
@@ -585,6 +585,20 @@ void MavStateEstimator::publishAntennaPosition(
   pub.publish(antenna_position);
 }
 
+void MavStateEstimator::createBiasMessage(
+    const gtsam::imuBias::ConstantBias& bias, const ros::Time& stamp,
+    geometry_msgs::Vector3Stamped* acc_bias,
+    geometry_msgs::Vector3Stamped* gyro_bias) const {
+  assert(acc_bias);
+  assert(gyro_bias);
+
+  acc_bias->header.stamp = stamp;
+  gyro_bias->header.stamp = stamp;
+
+  tf::vectorEigenToMsg(bias.accelerometer(), acc_bias->vector);
+  tf::vectorEigenToMsg(bias.gyroscope(), gyro_bias->vector);
+}
+
 void MavStateEstimator::publishBias(
     const gtsam::imuBias::ConstantBias& bias, const ros::Time& stamp,
     const ros::Publisher& acc_bias_pub, const ros::Publisher& gyro_bias_pub,
@@ -592,11 +606,7 @@ void MavStateEstimator::publishBias(
     geometry_msgs::Vector3Stamped* gyro_bias) const {
   assert(acc_bias);
   assert(gyro_bias);
-  acc_bias->header.stamp = stamp;
-  gyro_bias->header.stamp = stamp;
-
-  tf::vectorEigenToMsg(bias.accelerometer(), acc_bias->vector);
-  tf::vectorEigenToMsg(bias.gyroscope(), gyro_bias->vector);
+  createBiasMessage(bias, stamp, acc_bias, gyro_bias);
 
   acc_bias_pub.publish(*acc_bias);
   gyro_bias_pub.publish(*gyro_bias);
@@ -811,21 +821,11 @@ void MavStateEstimator::solveBatch(
     ROS_WARN("Cannot open bag file %s: %s", bag_file->c_str(), e.what());
   }
 
-  const uint32_t kQueueSize = 1800000;
   const std::string kAccBiasTopic =
       nh_private_.getNamespace() + "/batch_acc_bias";
   const std::string kGyroBiasTopic =
       nh_private_.getNamespace() + "/batch_gyro_bias";
   const std::string kTfTopic = nh_private_.getNamespace() + "/batch";
-  auto batch_acc_bias_pub =
-      nh_private_.advertise<geometry_msgs::Vector3Stamped>(kAccBiasTopic,
-                                                           kQueueSize);
-  auto batch_gyro_bias_pub =
-      nh_private_.advertise<geometry_msgs::Vector3Stamped>(kGyroBiasTopic,
-                                                           kQueueSize);
-  auto batch_pub = nh_private_.advertise<geometry_msgs::TransformStamped>(
-      kTfTopic, kQueueSize);
-  ros::spinOnce();
 
   gtsam::LevenbergMarquardtOptimizer optimizer(*graph, *values);
   auto result = optimizer.optimize();
@@ -862,11 +862,10 @@ void MavStateEstimator::solveBatch(
             imu_state = prev_state;
             prev_bias = result.at<gtsam::imuBias::ConstantBias>(B(idx));
             integrator->resetIntegrationAndSetBias(prev_bias);
-
-            geometry_msgs::Vector3Stamped acc_bias, gyro_bias;
-            publishBias(prev_bias, (*imu)->header.stamp, batch_acc_bias_pub,
-                        batch_gyro_bias_pub, &acc_bias, &gyro_bias);
             try {
+              geometry_msgs::Vector3Stamped acc_bias, gyro_bias;
+              createBiasMessage(prev_bias, (*imu)->header.stamp, &acc_bias,
+                                &gyro_bias);
               bag.write(kAccBiasTopic, acc_bias.header.stamp, acc_bias);
               bag.write(kGyroBiasTopic, gyro_bias.header.stamp, gyro_bias);
             } catch (const rosbag::BagIOException& e) {
@@ -887,12 +886,8 @@ void MavStateEstimator::solveBatch(
         // Log
         geometry_msgs::TransformStamped T_IB =
             getTransform(imu_state, (*imu)->header.stamp, base_frame_);
-        batch_pub.publish(T_IB);
-        tf2_msgs::TFMessage tfmsg;
         try {
           bag.write(kTfTopic, T_IB.header.stamp, T_IB);
-
-          tfmsg.transforms.push_back(T_IB);
         } catch (const rosbag::BagIOException& e) {
           ROS_WARN_ONCE("Cannot write batch pose to bag: %s", e.what());
         } catch (const rosbag::BagException& e) {
@@ -908,8 +903,8 @@ void MavStateEstimator::solveBatch(
             T_BE = tf_buffer_.lookupTransform(base_frame_, frame,
                                               T_IB.header.stamp);
           } catch (...) {
-            ROS_WARN("Cannot lookup T_BE from B: %s E: %s", base_frame_.c_str(),
-                     frame.c_str());
+            ROS_WARN_ONCE("Cannot lookup T_BE from B: %s E: %s",
+                          base_frame_.c_str(), frame.c_str());
             continue;
           }
           tf2::Stamped<tf2::Transform> tf2_T_BE;
@@ -924,8 +919,6 @@ void MavStateEstimator::solveBatch(
 
           try {
             bag.write(frame, T_IE.header.stamp, T_IE);
-
-            tfmsg.transforms.push_back(T_IE);
           } catch (const rosbag::BagIOException& e) {
             ROS_WARN_ONCE("Cannot write batch pose %s to bag: %s",
                           frame.c_str(), e.what());
@@ -933,9 +926,6 @@ void MavStateEstimator::solveBatch(
             ROS_WARN("Cannot write batch pose %s: %s", frame.c_str(), e.what());
           }
         }
-        bag.write("/tf", T_IB.header.stamp, tfmsg);
-
-        ros::spinOnce();
       }
       ROS_INFO_STREAM("Solved batch solution from "
                       << start << " to " << (*prev_imu)->header.stamp);

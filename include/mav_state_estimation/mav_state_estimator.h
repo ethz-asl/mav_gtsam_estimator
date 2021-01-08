@@ -59,6 +59,10 @@ class MavStateEstimator {
                        const gtsam::imuBias::ConstantBias& bias,
                        const ros::Time& stamp,
                        const geometry_msgs::TransformStamped& T_IB) const;
+  void createBiasMessage(const gtsam::imuBias::ConstantBias& bias,
+                         const ros::Time& stamp,
+                         geometry_msgs::Vector3Stamped* acc_bias,
+                         geometry_msgs::Vector3Stamped* gyro_bias) const;
   void publishBias(const gtsam::imuBias::ConstantBias& bias,
                    const ros::Time& stamp, const ros::Publisher& acc_bias_pub,
                    const ros::Publisher& gyro_bias_pub) const;

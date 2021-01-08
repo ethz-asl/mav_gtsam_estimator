@@ -1,3 +1,23 @@
+/*
+MIT License
+Copyright (c) 2021 Rik Baehnemann, ASL, ETH Zurich, Switzerland
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
 #ifndef MAV_STATE_ESTIMATOR_MAV_STATE_ESTIMATOR_H_
 #define MAV_STATE_ESTIMATOR_MAV_STATE_ESTIMATOR_H_
 
@@ -59,6 +79,10 @@ class MavStateEstimator {
                        const gtsam::imuBias::ConstantBias& bias,
                        const ros::Time& stamp,
                        const geometry_msgs::TransformStamped& T_IB) const;
+  void createBiasMessage(const gtsam::imuBias::ConstantBias& bias,
+                         const ros::Time& stamp,
+                         geometry_msgs::Vector3Stamped* acc_bias,
+                         geometry_msgs::Vector3Stamped* gyro_bias) const;
   void publishBias(const gtsam::imuBias::ConstantBias& bias,
                    const ros::Time& stamp, const ros::Publisher& acc_bias_pub,
                    const ros::Publisher& gyro_bias_pub) const;
@@ -91,6 +115,7 @@ class MavStateEstimator {
 
   ros::Publisher timing_pub_;
   mav_state_estimation::Timing timing_msg_;
+  int odometry_throttle_ = 1;
 
   ros::Publisher prediction_pub_;
   ros::Publisher optimization_pub_;

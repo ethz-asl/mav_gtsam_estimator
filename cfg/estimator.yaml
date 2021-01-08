@@ -38,7 +38,7 @@ attitude_receiver:
   B_t: [0.110, -0.204, 0.336]
   prior_noise_B_t: 0.01
   process_noise_B_t: 1.0e-5
-  scale_cov: 1.0
+  scale_cov: 2.0
   rate: 5
 
 isam2:
@@ -52,4 +52,8 @@ isam2:
   enable_partial_relinarization_check: False
   smoother_lag: 3.0 # s WARNING: This time needs to be greater than any imaginable sensor arrival delay
 
+# External poses to evaluate during batch process.
 external_poses: ["a1", "a2", "a3", "a4", "bfly", "FLU"]
+
+# Publish odometry, prediction and TF every nth IMU message.
+odometry_throttle: 10

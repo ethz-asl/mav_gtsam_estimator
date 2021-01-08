@@ -1,5 +1,6 @@
 #!/bin/bash -e
 echo "Running the prepare script for mav_state_estimation.";
+source /opt/ros/melodic/setup.bash
 ROS_VERSION=`rosversion -d`
 echo "ROS version: ${ROS_VERSION}"
 

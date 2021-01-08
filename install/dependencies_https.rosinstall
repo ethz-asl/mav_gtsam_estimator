@@ -1,1 +1,2 @@
 - git: {local-name: catkin_simple, uri: 'https://github.com/catkin/catkin_simple.git'}
+- git: {local-name: ethz_piksi_ros, uri: 'https://github.com/ethz-asl/ethz_piksi_ros.git'}

@@ -1,0 +1,1 @@
+- git: {local-name: catkin_simple, uri: 'git@github.com:catkin/catkin_simple.git'}

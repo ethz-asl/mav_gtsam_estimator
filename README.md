@@ -32,42 +32,25 @@ catkin config --extend /opt/ros/melodic
 catkin config --merge-devel
 ```
 
-Download this package and the Piksi GNSS driver [ethz_piksi_ros](git@github.com:ethz-asl/ethz_piksi_ros.git).
+Install [piksi_multi_cpp](https://github.com/ethz-asl/ethz_piksi_ros/tree/master/piksi_multi_cpp) within the same workspace.
+
+Download this package.
 ```
 cd ~/catkin_ws/src
 git clone git@github.com:rikba/mav_state_estimation.git
-git clone git@github.com:ethz-asl/polygon_coverage_planning.git
 ```
 
 Install all [PPA dependencies](install/prepare-jenkins-slave.sh).
 ```
-cd mav_state_estimation
-./install/prepare-jenkins-slave.sh
+./mav_state_estimation/install/prepare-jenkins-slave.sh
 ```
 
-Next download all ROS package dependencies.
+Next download all individual ROS package dependencies.
 **Note**: If you have not setup [SSH keys in GitHub](https://help.github.com/en/enterprise/2.16/user/articles/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent) use [dependencies_https.rosinstall](install/dependencies_https.rosinstall).
 ```
 wstool init
-wstool merge polygon_coverage_planning/install/dependencies.rosinstall
+wstool merge mav_state_estimation/install/dependencies.rosinstall
 wstool update
-```
-
-
-Download package dependencies from [dependencies.rosinstall](install/dependencies.rosinstall).
-```
-cd ~/catkin_ws/src
-git clone git@github.com:ethz-asl/polygon_coverage_planning.git
-wstool init
-wstool merge polygon_coverage_planning/install/dependencies.rosinstall
-wstool update
-```
-
-
-Install all [remaining dependencies](https://github.com/ethz-asl/polygon_coverage_planning/blob/master/install/prepare-jenkins-slave.sh):
-```
-cd ~/catkin_ws/polygon_coverage_planning/install
-./prepare-jenkins-slave.sh
 ```
 
 Finally, build the workspace.

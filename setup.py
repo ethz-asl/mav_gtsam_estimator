@@ -7,7 +7,8 @@ from catkin_pkg.python_setup import generate_distutils_setup
 setup_args = generate_distutils_setup(
     packages=['mav_state_estimation'],
     package_dir={'':'python'},
-    scripts=['scripts/export_csv']
+    scripts=['scripts/export_csv',
+             'scripts/filter_imu']
     )
 
 setup(**setup_args)

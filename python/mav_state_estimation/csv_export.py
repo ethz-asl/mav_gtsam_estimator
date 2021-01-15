@@ -24,6 +24,7 @@
 
 import os
 import rosbag
+import rospy
 from datetime import datetime
 
 def getStamp(stamp):
@@ -39,27 +40,43 @@ def getRotation(rotation):
     return "%f,%f,%f,%f" %(rotation.w, rotation.x, rotation.y, rotation.z)
 
 
-def toCsv(bag_file, topics):
+def toCsv(bag_file, topics, feedback=None):
+
+    if feedback:
+        from mav_state_estimation.msg import BatchStatus
+        status = BatchStatus()
+        status.finished = False
+        status.current_idx = 0
+        status.total_idx = 0
+
     if not os.path.exists(bag_file):
-        print("File %s does not exist." % (bag_file))
+        rospy.logerr("File %s does not exist." % (bag_file))
         return False
 
     if not os.path.isfile(bag_file):
-        print("File %s is not a file." % (bag_file))
+        rospy.logerr("File %s is not a file." % (bag_file))
         return False
+
 
     csv_path = os.path.dirname(bag_file) + '/export/'
     if not os.path.exists(csv_path):
         os.mkdir(csv_path)
 
-    f = {}
-    for topic in topics:
-        csv_file = csv_path + topic + '.csv'
-        f[topic] = open(csv_file, 'w')
-        f[topic].write('year, month, day, hour, min, second, microsecond, x, y, z, qw, qx, qy, qz\n')
-
     bag = rosbag.Bag(bag_file)
-    for topic, msg, t in bag.read_messages(topics=topics):
+
+    f = {}
+    info = bag.get_type_and_topic_info(topics)[1]
+    for topic in topics:
+        if topic in info.keys() and info[topic].message_count > 0 and info[topic].msg_type == 'geometry_msgs/TransformStamped':
+            csv_file = csv_path + topic + '.csv'
+            rospy.loginfo("Creating new CSV file %s" % (csv_file))
+            f[topic] = open(csv_file, 'w')
+            f[topic].write('year, month, day, hour, min, second, microsecond, x, y, z, qw, qx, qy, qz\n')
+
+            if feedback:
+                status.total_idx = status.total_idx + info[topic].message_count
+
+    for topic, msg, t in bag.read_messages(topics=f.keys()):
         if msg.header.stamp and msg.transform.translation and msg.transform.rotation and f[topic]:
             # Stamp
             f[topic].write(getStamp(msg.header.stamp))
@@ -69,7 +86,15 @@ def toCsv(bag_file, topics):
             f[topic].write(getRotation(msg.transform.rotation))
             f[topic].write("\n")
 
+            if feedback:
+                status.current_idx = status.current_idx + 1
+                if (10 * status.current_idx) % status.total_idx == 0:
+                    feedback.publish(status) # Every 10 percent
+
     for topic in f:
         f[topic].close()
 
+    if feedback:
+        status.finished = True
+        feedback.publish(status)
     return True

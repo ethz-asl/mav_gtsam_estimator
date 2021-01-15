@@ -26,6 +26,7 @@ import rospy
 
 from mav_state_estimation.csv_export import*
 from mav_state_estimation.srv import BagToCsv, BagToCsvResponse
+from mav_state_estimation.msg import BatchStatus
 
 global new_request
 global request
@@ -44,7 +45,8 @@ def bag_to_csv(req):
 if __name__ == '__main__':
     rospy.init_node('bag_to_csv')
     new_request = False
-    s = rospy.Service('bag_to_csv', BagToCsv, bag_to_csv)
+    rospy.Service('bag_to_csv', BagToCsv, bag_to_csv)
+    status_pub = rospy.Publisher('status', BatchStatus, queue_size=1)
 
     rate = rospy.Rate(2)
     while not rospy.is_shutdown():
@@ -52,9 +54,11 @@ if __name__ == '__main__':
             request.topics = request.topics.replace(" ", "")
             topics = request.topics.split(",")
             rospy.loginfo("Exporting the following poses: %s from bag %s" %(topics, request.bag_file))
-            if toCsv(request.bag_file, topics):
+            if toCsv(request.bag_file, topics, status_pub):
                 rospy.loginfo("Finished export.")
             else:
                 rospy.logerr("Failed export.")
+            rospy.loginfo(stop - start)
             new_request = False
+
         rate.sleep()

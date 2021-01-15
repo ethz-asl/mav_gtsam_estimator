@@ -12,6 +12,7 @@ Bähnemann, Rik, et al.
 "One Foot Underground: GNSS State Estimation for Ground Penetrating Radar on a Micro Aerial Vehicle."
 Field Robotics. 2021.
 ```
+![](https://user-images.githubusercontent.com/11293852/104023073-6af65a80-51c1-11eb-8a77-a9cfd53860fd.png)
 
 ## Installation on Ubuntu 18.04 and ROS melodic
 Install [ROS melodic](http://wiki.ros.org/melodic/Installation/Ubuntu).

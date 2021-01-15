@@ -856,7 +856,7 @@ void MavStateEstimator::solveBatch(
   status_pub = nh_private_.advertise<mav_state_estimation::BatchStatus>(
       "batch_status", kBatchStatusQueueSize);
   mav_state_estimation::BatchStatus batch_status;
-  batch_status.total_idx = values->size();
+  batch_status.total_idx = idx_to_stamp->size();
   batch_status.finished = false;
 
   gtsam::LevenbergMarquardtOptimizer optimizer(*graph, *values);

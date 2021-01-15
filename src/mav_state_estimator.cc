@@ -891,6 +891,10 @@ void MavStateEstimator::solveBatch(
         if ((*imu)->header.stamp == idx_to_stamp->at(idx + 1)) {
           idx++;
           batch_status.current_idx = idx;
+          // Publish status every 10 percent.
+          if (((10 * batch_status.current_idx) % batch_status.total_idx) == 0) {
+            status_pub.publish(batch_status);
+          }
           try {
             prev_state = gtsam::NavState(result.at<gtsam::Pose3>(X(idx)),
                                          result.at<gtsam::Velocity3>(V(idx)));
@@ -928,7 +932,6 @@ void MavStateEstimator::solveBatch(
         } catch (const rosbag::BagException& e) {
           ROS_WARN("Cannot write batch pose: %s", e.what());
         }
-        status_pub.publish(batch_status);
 
         // Additional external poses
         tf2::Stamped<tf2::Transform> tf2_T_IB;

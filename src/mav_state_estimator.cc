@@ -33,6 +33,7 @@ SOFTWARE.
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2_msgs/TFMessage.h>
 
+#include "mav_state_estimation/BatchStatus.h"
 #include "mav_state_estimation/Timing.h"
 #include "mav_state_estimation/absolute_position_factor.h"
 #include "mav_state_estimation/moving_baseline_factor.h"
@@ -850,12 +851,21 @@ void MavStateEstimator::solveBatch(
       nh_private_.getNamespace() + "/batch_gyro_bias";
   const std::string kTfTopic = nh_private_.getNamespace() + "/batch";
 
+  ros::Publisher status_pub;
+  const uint32_t kBatchStatusQueueSize = 1;
+  status_pub = nh_private_.advertise<mav_state_estimation::BatchStatus>(
+      "batch_status", kBatchStatusQueueSize);
+  mav_state_estimation::BatchStatus batch_status;
+  batch_status.total_idx = values->size();
+  batch_status.finished = false;
+
   gtsam::LevenbergMarquardtOptimizer optimizer(*graph, *values);
   auto result = optimizer.optimize();
 
   try {
     uint64_t idx = 0;
-    auto start = idx_to_stamp->at(0);
+    batch_status.current_idx = idx;
+    auto start = idx_to_stamp->at(idx);
     auto prev_imu = std::find_if(imus->begin(), imus->end(),
                                  [&start](const sensor_msgs::Imu::ConstPtr& x) {
                                    return x->header.stamp == start;
@@ -879,6 +889,7 @@ void MavStateEstimator::solveBatch(
         // Update solution index.
         if ((*imu)->header.stamp == idx_to_stamp->at(idx + 1)) {
           idx++;
+          batch_status.current_idx = idx;
           try {
             prev_state = gtsam::NavState(result.at<gtsam::Pose3>(X(idx)),
                                          result.at<gtsam::Velocity3>(V(idx)));
@@ -916,6 +927,7 @@ void MavStateEstimator::solveBatch(
         } catch (const rosbag::BagException& e) {
           ROS_WARN("Cannot write batch pose: %s", e.what());
         }
+        status_pub.publish(batch_status);
 
         // Additional external poses
         tf2::Stamped<tf2::Transform> tf2_T_IB;
@@ -959,6 +971,9 @@ void MavStateEstimator::solveBatch(
 
   bag.close();
   batch_running_.store(false);
+
+  batch_status.finished = true;
+  status_pub.publish(batch_status);
 }
 
 }  // namespace mav_state_estimation

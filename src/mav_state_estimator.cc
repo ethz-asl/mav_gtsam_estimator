@@ -794,7 +794,8 @@ void MavStateEstimator::solveThreaded(
 bool MavStateEstimator::computeBatchSolution(Batch::Request& request,
                                              Batch::Response& response) {
   auto already_running = batch_running_.load();
-  if (!already_running) {
+  bool initialized = batch_graph_.size();
+  if (!already_running && initialized) {
     batch_running_.store(true);
     // Create deep copies of current graph and initial values.
     {
@@ -819,7 +820,7 @@ bool MavStateEstimator::computeBatchSolution(Batch::Request& request,
     }
   }
 
-  return !already_running;
+  return !already_running && initialized;
 }
 
 void MavStateEstimator::solveBatch(

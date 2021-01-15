@@ -42,5 +42,8 @@ target_link_libraries(test_moving_baseline_factor ${PROJECT_NAME}_nodelet)
 cs_add_executable(mav_state_estimator src/mav_state_estimator_node.cc)
 target_link_libraries(mav_state_estimator ${PROJECT_NAME}_nodelet)
 
+catkin_install_python(PROGRAMS nodes/bag_to_csv scripts/export_csv scripts/filter_imu
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+
 cs_install()
 cs_export()

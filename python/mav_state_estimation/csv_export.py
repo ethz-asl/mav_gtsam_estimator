@@ -40,6 +40,14 @@ def getRotation(rotation):
 
 
 def toCsv(bag_file, topics):
+    if not os.path.exists(bag_file):
+        print("File %s does not exist." % (bag_file))
+        return False
+
+    if not os.path.isfile(bag_file):
+        print("File %s is not a file." % (bag_file))
+        return False
+
     csv_path = os.path.dirname(bag_file) + '/export/'
     if not os.path.exists(csv_path):
         os.mkdir(csv_path)
@@ -63,3 +71,5 @@ def toCsv(bag_file, topics):
 
     for topic in f:
         f[topic].close()
+
+    return True

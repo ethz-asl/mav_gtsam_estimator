@@ -46,7 +46,7 @@ if __name__ == '__main__':
     rospy.init_node('bag_to_csv')
     new_request = False
     rospy.Service('~bag_to_csv', BagToCsv, bag_to_csv)
-    status_pub = rospy.Publisher('status', BatchStatus, queue_size=1)
+    status_pub = rospy.Publisher('~status', BatchStatus, queue_size=1)
 
     rate = rospy.Rate(2)
     while not rospy.is_shutdown():

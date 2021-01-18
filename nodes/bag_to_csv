@@ -58,7 +58,6 @@ if __name__ == '__main__':
                 rospy.loginfo("Finished export.")
             else:
                 rospy.logerr("Failed export.")
-            rospy.loginfo(stop - start)
             new_request = False
 
         rate.sleep()

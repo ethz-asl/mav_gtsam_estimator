@@ -29,10 +29,15 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Bag merging.')
     parser.add_argument('input_bag', nargs=1, help='The bag containing stamped poses.')
     parser.add_argument('pose_topics', nargs='+', help='All pose topics to export.')
+    parser.add_argument('--stamp_topic', dest='stamp_topic', nargs=1, default='', help='Only export topics with this timestamp.')
 
     args = parser.parse_args()
 
     print("Input bag: %s" %(args.input_bag[0]))
     print("Pose topics: %s" %(args.pose_topics))
+    stamp_topic = None
+    if args.stamp_topic:
+        print("Stamp topic: %s" %(args.stamp_topic[0]))
+        stamp_topic = args.stamp_topic[0]
 
-    toCsv(args.input_bag[0], args.pose_topics)
+    toCsv(args.input_bag[0], args.pose_topics, stamp_topic=stamp_topic)

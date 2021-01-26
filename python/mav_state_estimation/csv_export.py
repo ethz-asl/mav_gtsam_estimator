@@ -40,7 +40,7 @@ def getRotation(rotation):
     return "%f,%f,%f,%f" %(rotation.w, rotation.x, rotation.y, rotation.z)
 
 
-def toCsv(bag_file, topics, feedback=None):
+def toCsv(bag_file, topics, stamp_topic=None, feedback=None):
 
     if feedback:
         from mav_state_estimation.msg import BatchStatus
@@ -76,20 +76,28 @@ def toCsv(bag_file, topics, feedback=None):
             if feedback:
                 status.total_idx = status.total_idx + info[topic].message_count
 
+    stamps = set()
+    if stamp_topic:
+        for topic, msg, t in bag.read_messages(topics=[stamp_topic]):
+            stamps.add(msg.header.stamp)
+
     for topic, msg, t in bag.read_messages(topics=f.keys()):
         if msg.header.stamp and msg.transform.translation and msg.transform.rotation and f[topic]:
-            # Stamp
+
+            if feedback:
+                status.current_idx = status.current_idx + 1
+                if (10 * status.current_idx) % status.total_idx == 0:
+                    feedback.publish(status) # Every 10 percent
+
+            if stamp_topic and msg.header.stamp not in stamps:
+                continue
+
             f[topic].write(getStamp(msg.header.stamp))
             f[topic].write(",")
             f[topic].write(getTranslation(msg.transform.translation))
             f[topic].write(",")
             f[topic].write(getRotation(msg.transform.rotation))
             f[topic].write("\n")
-
-            if feedback:
-                status.current_idx = status.current_idx + 1
-                if (10 * status.current_idx) % status.total_idx == 0:
-                    feedback.publish(status) # Every 10 percent
 
     for topic in f:
         f[topic].close()

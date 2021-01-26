@@ -54,7 +54,7 @@ if __name__ == '__main__':
             request.topics = request.topics.replace(" ", "")
             topics = request.topics.split(",")
             rospy.loginfo("Exporting the following poses: %s from bag %s" %(topics, request.bag_file))
-            if toCsv(request.bag_file, topics, status_pub):
+            if toCsv(request.bag_file, topics, feedback=status_pub):
                 rospy.loginfo("Finished export.")
             else:
                 rospy.logerr("Failed export.")

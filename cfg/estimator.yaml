@@ -53,7 +53,7 @@ isam2:
   smoother_lag: 3.0 # s WARNING: This time needs to be greater than any imaginable sensor arrival delay
 
 # External poses to evaluate during batch process.
-external_poses: ["a1", "a2", "a3", "a4", "bfly", "FLU"]
+external_poses: ["a1", "a2", "a3", "a4", "bfly", "velodyne", "FLU"]
 
 # Publish odometry, prediction and TF every nth IMU message.
 odometry_throttle: 10

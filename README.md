@@ -6,7 +6,7 @@ At the moment it supports
 - GNSS position measurements
 - GNSS moving baseline measurements
 
-Please cite our accompanying publication when using it.
+Please cite our [accompanying publication](https://arxiv.org/pdf/2106.10108.pdf) when using it.
 ```
 Bähnemann, Rik, et al.
 "Under the Sand: Navigation and Localization of a Small Unmanned Aerial Vehicle for Landmine Detection with Ground Penetrating Synthetic Aperture Radar"

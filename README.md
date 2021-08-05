@@ -38,7 +38,7 @@ Install [piksi_multi_cpp](https://github.com/ethz-asl/ethz_piksi_ros/tree/master
 Download this package.
 ```
 cd ~/catkin_ws/src
-git clone git@github.com:rikba/mav_state_estimation.git
+git clone git@github.com:ethz-asl/mav_gtsam_estimator.git
 ```
 
 Install all [PPA dependencies](install/prepare-jenkins-slave.sh).

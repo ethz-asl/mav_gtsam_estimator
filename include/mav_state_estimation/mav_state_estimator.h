@@ -36,6 +36,7 @@ SOFTWARE.
 #include <gtsam/nonlinear/Values.h>
 #include <gtsam_unstable/nonlinear/IncrementalFixedLagSmoother.h>
 #include <piksi_rtk_msgs/PositionWithCovarianceStamped.h>
+#include <libsbp_ros_msgs/MsgBaselineHeading.h>
 #include <ros/ros.h>
 #include <sensor_msgs/Imu.h>
 #include <std_srvs/Empty.h>
@@ -63,7 +64,7 @@ class MavStateEstimator {
   void posCallback(
       const piksi_rtk_msgs::PositionWithCovarianceStamped::ConstPtr& pos_msg);
   void baselineCallback(
-      const piksi_rtk_msgs::PositionWithCovarianceStamped::ConstPtr&
+      const libsbp_ros_msgs::MsgBaselineHeading::ConstPtr&
           baseline_msg);
 
   geometry_msgs::TransformStamped getTransform(
@@ -99,10 +100,10 @@ class MavStateEstimator {
                       gtsam::noiseModel::Isotropic::shared_ptr* process_noise,
                       double* cov_scale);
 
-  void updateTimestampMap();
 
-  void addSensorTimes(const uint16_t rate);
-  bool addUnaryStamp(const ros::Time& stamp);
+  void addImuStamp(const ros::Time&);
+
+
   gtsam::imuBias::ConstantBias getCurrentBias();
   gtsam::NavState getCurrentState();
 
@@ -150,13 +151,14 @@ class MavStateEstimator {
 
   void initializeState();
   inline bool isInitialized() const { return !stamp_to_idx_.empty(); }
-  std::set<uint32_t> unary_times_ns_;
+
   std::map<ros::Time, uint64_t> stamp_to_idx_;
   std::map<uint64_t, ros::Time> idx_to_stamp_;
 
   // IMU interation
   gtsam::PreintegratedCombinedMeasurements integrator_;
-  sensor_msgs::Imu::ConstPtr prev_imu_;
+  Eigen::Vector3d prev_lin_acc_, prev_ang_vel_;
+  ros::Time prev_ts_;
 
   // Optimization
   gtsam::IncrementalFixedLagSmoother smoother_;
@@ -169,21 +171,6 @@ class MavStateEstimator {
   gtsam::NavState prev_state_;
   gtsam::imuBias::ConstantBias prev_bias_;
 
-  // Batch
-  std::mutex batch_mtx_;
-  gtsam::NonlinearFactorGraph batch_graph_;
-  gtsam::Values batch_values_;
-  std::vector<sensor_msgs::Imu::ConstPtr> batch_imu_;
-  void solveBatch(
-      std::unique_ptr<gtsam::NonlinearFactorGraph> graph,
-      std::unique_ptr<gtsam::Values> values,
-      std::unique_ptr<std::vector<sensor_msgs::Imu::ConstPtr>> imus,
-      std::unique_ptr<gtsam::PreintegratedCombinedMeasurements> integrator,
-      std::unique_ptr<std::map<uint64_t, ros::Time>> idx_to_stamp,
-      std::unique_ptr<std::string> bag_file);
-  bool computeBatchSolution(Batch::Request& request, Batch::Response& response);
-  std::thread batch_thread_;
-  std::atomic_bool batch_running_ = false;
 
   // Extra thread to solve factor graph.
   std::thread solver_thread_;

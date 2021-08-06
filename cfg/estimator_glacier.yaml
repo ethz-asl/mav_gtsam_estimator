@@ -1,0 +1,60 @@
+prior_noise_rot_IB: [0.03, 0.03, 0.03]
+prior_noise_I_t_B: [0.1, 0.1, 0.1]
+prior_noise_I_v_B: [0.01, 0.01, 0.01]
+# Gyro bias up to sensitivity 0.01 deg/s, because it is calibrated at startup.
+prior_noise_gyro_bias: [1.7e-4, 1.7e-4, 1.7e-4]
+# Acc bias repeatability from data sheet
+prior_noise_acc_bias: [2.0e-1, 2.0e-1, 2.0e-1]
+#prior_acc_bias: [0.11, 0.06, 0.00]
+prior_acc_bias: [0.0, 0.0, 0.0]
+prior_gyro_bias: [0.0, 0.0, 0.0]
+
+# IMU params from J. Rehder: Extending kalibr: Calibrating the Extrinsics of Multiple IMUs and of Individual Axes, Table II
+# https://github.com/ethz-asl/kalibr/issues/63#issuecomment-236140184
+# Two magnitudes greater to account for modelling errors
+acc_sigma: 1.86e-1
+gyro_sigma: 1.87e-2
+# One magnitude smaller to fix
+bias_acc_sigma: 4.33e-4
+bias_omega_sigma: 2.66e-5
+
+bias_acc_int_sigma: 1.0e-5
+bias_omega_int_sigma: 1.0e-5
+integration_sigma: 1.0e-7
+use_2nd_order_coriolis: true
+
+estimate_antenna_positions: false
+
+position_receiver:
+  # (Initial) extrinsic calibration
+  B_t: [0.110, 0.196, 0.336]
+  #B_t: [0.0, 0.0, 0.0]
+  prior_noise_B_t: 0.01
+  process_noise_B_t: 1.0e-5
+  scale_cov: 1.0
+  rate: 10
+
+attitude_receiver:
+  # (Initial) extrinsic calibration IMU frame
+  B_t: [0.110, -0.204, 0.336]
+  prior_noise_B_t: 0.01
+  process_noise_B_t: 1.0e-5
+  scale_cov: 2.0
+  rate: 5
+
+isam2:
+  relinearize_threshold_rot: 0.02 # rad
+  relinearize_threshold_pos: 0.01 # m
+  relinearize_threshold_vel: 0.01  # m/s
+  relinearize_threshold_acc_bias: 0.01 # m/s**2
+  relinearize_threshold_gyro_bias: 0.02 # rad/s
+  relinearize_threshold_antenna_calibration: 0.01 # m
+  relinearize_skip: 1
+  enable_partial_relinarization_check: False
+  smoother_lag: 1.0 # s WARNING: This time needs to be greater than any imaginable sensor arrival delay
+
+# External poses to evaluate during batch process.
+external_poses: []
+
+# Publish odometry, prediction and TF every nth IMU message.
+odometry_throttle: 10

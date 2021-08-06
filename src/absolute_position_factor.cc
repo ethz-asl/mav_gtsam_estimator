@@ -41,9 +41,9 @@ gtsam::Vector AbsolutePositionFactor1::evaluateError(
   gtsam::Vector3 h;
   if (D_Tt_T) {
     D_Tt_T->resize(3, 6);
-    h = T_I_B.transform_from(B_t_P_, D_Tt_T);
+    h = T_I_B.transformFrom(B_t_P_, D_Tt_T);
   } else {
-    h = T_I_B.transform_from(B_t_P_);
+    h = T_I_B.transformFrom(B_t_P_);
   }
 
   // error = h - z
@@ -86,7 +86,7 @@ gtsam::Vector AbsolutePositionFactor2::evaluateError(
   if (D_Tt_T || D_Tt_t) {
     gtsam::Matrix36 D_Tt_T_tmp;
     gtsam::Matrix33 D_Tt_t_tmp;
-    h = T_I_B.transform_from(B_t_P, D_Tt_T_tmp, D_Tt_t_tmp);
+    h = T_I_B.transformFrom(B_t_P, D_Tt_T_tmp, D_Tt_t_tmp);
     if (D_Tt_T) {
       D_Tt_T->resize(3, 6);
       *D_Tt_T = D_Tt_T_tmp;
@@ -96,7 +96,7 @@ gtsam::Vector AbsolutePositionFactor2::evaluateError(
       *D_Tt_t = D_Tt_t_tmp;
     }
   } else {
-    h = T_I_B.transform_from(B_t_P);
+    h = T_I_B.transformFrom(B_t_P);
   }
 
   // error = h - z

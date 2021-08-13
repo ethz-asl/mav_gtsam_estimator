@@ -38,54 +38,127 @@ namespace mav_state_estimation {
 
 // Moving baseline factor that determines the error and Jacobian w.r.t.
 // the heaading between two GPS antennas
-class HeadingFactor1 : public gtsam::NoiseModelFactor1<gtsam::Pose3> {
- public:
-  HeadingFactor1(gtsam::Key T_I_B_key,
-                        const double I_t_PA_heading_measured,
-                        const Eigen::Vector3d& B_t_PA,
-                        const gtsam::noiseModel::Base::shared_ptr& noise_model);
+    class HeadingFactor1 : public gtsam::NoiseModelFactor1<gtsam::Pose3> {
 
-  // Evaluates the error term and corresponding jacobians w.r.t. the pose.
-  gtsam::Vector evaluateError(
-      const gtsam::Pose3& T_I_B,
-      boost::optional<gtsam::Matrix&> D_Tt_T = boost::none) const override;
+        // Helper class that makes headings easier to deal with
+        class HeadingAngle {
+        public:
 
-  // Returns a deep copy of the factor.
-  inline gtsam::NonlinearFactor::shared_ptr clone() const override {
-    return gtsam::NonlinearFactor::shared_ptr(new HeadingFactor1(*this));
-  }
+            static inline HeadingAngle fromENU(const double enu_hdg) {
+                HeadingAngle value;
+                value.enu_hdg_angle_ = mapToRange(enu_hdg);
+                return value;
+            }
 
-  // Prints out information about the factor.
-  void print(const std::string& s,
-             const gtsam::KeyFormatter& key_formatter =
-                 gtsam::DefaultKeyFormatter) const override;
+            static inline HeadingAngle fromENUVector(const Eigen::Vector3d &vctr) {
+                HeadingAngle value;
+                value.enu_hdg_angle_ = std::atan2(vctr.y(), vctr.x());
+                return value;
+            }
 
-  // Equality operator.
-  bool equals(const gtsam::NonlinearFactor& expected,
-              double tolerance) const override;
+            static inline HeadingAngle fromNED(const double ned_hdg) {
+                HeadingAngle value;
+                value.enu_hdg_angle_ = mapToRange(NEDtoENU(mapToRange(ned_hdg)));
+                return value;
+            }
 
-  // Returns the measured moving baseline.
-  inline const double& measured() const { return I_t_PA_heading_measured_; }
+            /*
+            * Calculates the angular error with wraparound
+            * (shortest distance on manifold of angles)
+            */
+            HeadingAngle operator-(const HeadingAngle &other) const {
+                HeadingAngle value;
+                value.enu_hdg_angle_ = mapToRange(this->enu_hdg_angle_ - other.enu_hdg_angle_);
+                return value;
+            }
 
-  // Factory method.
-  inline static shared_ptr Create(
-      gtsam::Key T_I_B_key, const double I_t_PA_heading_measured,
-      const Eigen::Vector3d& B_t_PA,
-      const gtsam::noiseModel::Base::shared_ptr& noise_model) {
-    return shared_ptr(new HeadingFactor1(T_I_B_key, I_t_PA_heading_measured,
-                                                B_t_PA, noise_model));
-  }
 
- protected:
-  // Moving baseline measurement in inertial frame coordinates.
-  const double I_t_PA_heading_measured_;
-  // Extrinsic calibration from reference receiver antenna to attitude receiver
-  // antenna in base frame.
-  const Eigen::Vector3d B_t_PA_;
+            HeadingAngle operator+(const HeadingAngle &other) const {
+                HeadingAngle value;
+                value.enu_hdg_angle_ = mapToRange(this->enu_hdg_angle_ + other.enu_hdg_angle_);
+                return value;
+            }
 
- private:
-  typedef gtsam::NoiseModelFactor1<gtsam::Pose3> Base;
-};
+            HeadingAngle operator*(const double &scalar) const {
+                HeadingAngle value;
+                value.enu_hdg_angle_ = mapToRange(this->enu_hdg_angle_ * scalar);
+                return value;
+            }
+
+            bool operator==(const HeadingAngle &other) const {
+                return this->enu_hdg_angle_ == other.enu_hdg_angle_;
+            }
+
+            operator double() const { return this->enu_hdg_angle_; }
+
+        private:
+            static inline double NEDtoENU(const double ned) {
+                return -ned + M_PI_2;
+            }
+
+            /*
+            * Valid orientations are (-pi, pi]
+            */
+            inline static double mapToRange(double angle) {
+                // weird but correct
+                return std::atan2(sin(angle), cos(angle));
+            }
+
+            HeadingAngle() {}
+
+            double enu_hdg_angle_;
+        };
+
+    public:
+        HeadingFactor1(gtsam::Key T_I_B_key,
+                       const double hdg_measured_ned_,
+                       const Eigen::Vector3d &B_t_PA,
+                       const gtsam::noiseModel::Base::shared_ptr &noise_model);
+
+        // Evaluates the error term and corresponding jacobians w.r.t. the pose.
+        gtsam::Vector evaluateError(
+                const gtsam::Pose3 &T_I_B,
+                boost::optional<gtsam::Matrix &> D_Tt_T = boost::none) const override;
+
+        // Returns a deep copy of the factor.
+        inline gtsam::NonlinearFactor::shared_ptr clone() const override {
+            return gtsam::NonlinearFactor::shared_ptr(new HeadingFactor1(*this));
+        }
+
+        // Prints out information about the factor.
+        void print(const std::string &s,
+                   const gtsam::KeyFormatter &key_formatter =
+                   gtsam::DefaultKeyFormatter) const override;
+
+        // Equality operator.
+        bool equals(const gtsam::NonlinearFactor &expected,
+                    double tolerance) const override;
+
+        // Returns the measured moving baseline.
+        inline const double measured() const { return hdg_measured_enu_; }
+
+        // Factory method.
+        inline static shared_ptr Create(
+                gtsam::Key T_I_B_key, const double hdg_measured_ned,
+                const Eigen::Vector3d &B_t_PA,
+                const gtsam::noiseModel::Base::shared_ptr &noise_model) {
+            return shared_ptr(new HeadingFactor1(T_I_B_key, hdg_measured_ned,
+                                                 B_t_PA, noise_model));
+        }
+
+
+    protected:
+        // Moving baseline measurement in inertial frame coordinates.
+        const HeadingAngle hdg_measured_enu_;
+
+        // Extrinsic calibration from reference receiver antenna to attitude receiver
+        // antenna in base frame.
+        const Eigen::Vector3d B_t_PA_;
+
+
+    private:
+        typedef gtsam::NoiseModelFactor1<gtsam::Pose3> Base;
+    };
 
 }  // namespace mav_state_estimation
 #endif  // MAV_STATE_ESTIMATION_HEADING_FACTOR_H

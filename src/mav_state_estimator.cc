@@ -265,6 +265,16 @@ namespace mav_state_estimation {
             // Print
             new_values_.print("Initial state: ");
             ROS_INFO_STREAM("Initialization stamp: " << idx_to_stamp_[idx_]);
+
+            // INITIAL HEADING:
+            const Eigen::Vector3d B_t_PA = B_t_A_ - B_t_P_;
+            auto I_t_P_A = T_IB.rotation().rotate(B_t_PA);
+
+            // east component in [0]
+            // north component in [1]
+            double h = atan2(I_t_P_A[0], I_t_P_A[1]);
+            ROS_WARN_STREAM("INITIAL HEADING = " << h);
+
         }
     }
 
@@ -403,21 +413,21 @@ namespace mav_state_estimation {
         // TODO(rikba): Account for different frame positions. This rotation is
         // only correct if ENU and NED origin coincide.
 
-        Eigen::Matrix3d r_I_B_yaw_measured(
-        Eigen::AngleAxisd(NED_heading, Eigen::Vector3d::UnitZ()));
-        Eigen::Vector3d hdg_measured = r_I_B_yaw_measured * Eigen::Vector3d::UnitY();
+        const Eigen::Vector3d B_t_PA = B_t_A_ - B_t_P_;
+        Eigen::AngleAxisd r_I_B_yaw_measured(NED_heading, Eigen::Vector3d::UnitZ());
+        Eigen::Vector3d hdg_measured = r_I_B_yaw_measured * B_t_PA;
 
         // Moving baseline heading in base frame (IMU).
-        const Eigen::Vector3d B_t_PA = B_t_A_ - B_t_P_;
+
         if (!isInitialized()) {
-            init_.addOrientationConstraint2(hdg_measured, B_t_PA, stamp);
+            init_.addOrientationConstraint2(hdg_measured,B_t_PA, stamp);
         } else {
-            Eigen::Matrix3d covariance_simple;
+            Eigen::MatrixXd covariance_simple(1, 1);
 
             // doesn't make a whole lot of sense. to be checked later.
-            covariance_simple.diagonal() << 0.04, 0.04, 0.000001;
+            covariance_simple.diagonal() << 0.001;
             auto cov = gtsam::noiseModel::Gaussian::Covariance(
-                    covariance_simple / (stamp - previous_stamp).toSec());
+                    covariance_simple);
             gtsam::NonlinearFactor::shared_ptr baseline_factor;
 
             baseline_factor =

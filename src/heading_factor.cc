@@ -27,63 +27,53 @@ SOFTWARE.
 namespace mav_state_estimation {
 
     HeadingFactor1::HeadingFactor1(
-            gtsam::Key T_I_B_key, const double I_t_PA_heading_measured_,
+            gtsam::Key T_I_B_key, const double hdg_measured_ned_,
             const Eigen::Vector3d &B_t_PA,
             const gtsam::noiseModel::Base::shared_ptr &noise_model)
             : Base(noise_model, T_I_B_key),
-              I_t_PA_heading_measured_(I_t_PA_heading_measured_),
+
+            //calculate ENU heading and add offset based on calibration
+              hdg_measured_enu_(HeadingAngle::fromNED(hdg_measured_ned_)),
               B_t_PA_(B_t_PA) {
         assert(noise_model);
     }
 
     gtsam::Vector HeadingFactor1::evaluateError(
             const gtsam::Pose3 &T_I_B, boost::optional<gtsam::Matrix &> D_Tt_T) const {
-        // the math of this might be a bit shaky - just a first test.
 
-        // get unit vector in ENU (will be in E-N plane always)
-        Eigen::Matrix3d
-        r_I_B_yaw_measured(
-                Eigen::AngleAxisd(I_t_PA_heading_measured_, Eigen::Vector3d::UnitZ())
-        );
+        // Calculate apparent heading angle of antenna configurations
+        gtsam::Matrix33 D_Rt_R;
+        auto I_t_P_A = T_I_B.rotation().rotate(B_t_PA_, D_Rt_R);
+        HeadingAngle hdg_estimated_enu = HeadingAngle::fromENUVector(I_t_P_A);
 
-        // the yaw we obtain is in NED, so we need to rotate the North vector (Y) in ENU.
-        Eigen::Vector3d hdg_measured = r_I_B_yaw_measured * Eigen::Vector3d::UnitY();
+        // get error (headingAngle class takes care of wraparound etc)
+        HeadingAngle hdg_error_enu = hdg_estimated_enu - hdg_measured_enu_;
 
-        // decouple Roll pitch from yaw
-        // only valid because we don't fly omnidirectionally!!
-        Eigen::Matrix3d r_I_B = T_I_B.rotation().matrix();
-        double hdg = r_I_B.eulerAngles(2, 1, 0).x();
-        Eigen::Matrix3d r_I_B_yaw(Eigen::AngleAxisd(hdg, Eigen::Vector3d::UnitZ()));
-
-        gtsam::Pose3 T_I_B_yaw(gtsam::Rot3(r_I_B_yaw), T_I_B.translation());
-
-        // h(R,p) = R_IB_yaw * (B_t_PA).normalized()
-        // important, we compared against the normalized vector!
-        Eigen::Vector3d h;
+        // provide jacobian if needed
         if (D_Tt_T) {
-            gtsam::Matrix33 D_Rt_R;
-            h = T_I_B_yaw.rotation().rotate(-B_t_PA_.normalized(), D_Rt_R);
-            D_Tt_T->resize(3, 6);
-            D_Tt_T->leftCols<3>() = D_Rt_R;
-            D_Tt_T->rightCols<3>() = gtsam::Matrix::Zero(3, 3);
-        } else {
-            h = T_I_B_yaw.rotation().rotate(-B_t_PA_.normalized());
+            // Dimension: 1x6?
+            D_Tt_T->resize(1, 6);
+            D_Tt_T->setZero();
+            D_Tt_T->matrix()(0, 2) = 1.0;   //we only affect yaw
         }
 
-        // error = h - z
-        ROS_WARN_STREAM("H_err: " << (h - hdg_measured).norm());
-        ROS_WARN_STREAM("H: " << h);
-        ROS_WARN_STREAM("H_meas: " << hdg_measured);
-
-
-        return (h - hdg_measured);
+        /*
+        ROS_WARN_STREAM(
+                "Hdg Meas/Meas body/ Est/Err: " << hdg_measured_enu_ << "\t"
+                                                << hdg_measured_enu_body << "\t"
+                                                << hdg_estimated_enu << "\t"
+                                                << hdg_error_enu);
+        */
+        Eigen::VectorXd result(1);
+        result[0] = hdg_error_enu;
+        return result;
     }
 
     void HeadingFactor1::print(const std::string &text,
                                const gtsam::KeyFormatter &key_formatter) const {
         std::cout << text << "MovingBaselineFactor1(" << key_formatter(this->key())
                   << ")\n";
-        std::cout << "  measured I_t_PA heading: " << I_t_PA_heading_measured_;
+        std::cout << "  measured enu heading: " << hdg_measured_enu_;
         std::cout << "  extrinsic calibration B_t_PA: " << B_t_PA_.transpose();
         this->noiseModel_->print("  noise model: ");
     }
@@ -94,7 +84,7 @@ namespace mav_state_estimation {
                 dynamic_cast<const HeadingFactor1 *>(&expected);  // NOLINT
         if (!expected_casted) return false;
         bool measured_equal =
-                (I_t_PA_heading_measured_ == expected_casted->I_t_PA_heading_measured_);
+                (hdg_measured_enu_ == expected_casted->hdg_measured_enu_);
         bool calibration_equal = (B_t_PA_ == expected_casted->B_t_PA_);
         return Base::equals(*expected_casted, tolerance) && measured_equal &&
                calibration_equal;

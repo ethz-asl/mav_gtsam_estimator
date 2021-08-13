@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <arg name="mav_name" default="owl"/>
+  <arg name="run_estimator" default="true"/>
+
+  <group ns="$(arg mav_name)">
+
+    <!-- Estimator -->
+    <group if="$(arg run_estimator)">
+      <node name="mav_state_estimator" pkg="mav_state_estimation" type="mav_state_estimator" clear_params="true" output="screen">
+        <remap from="imu0" to="/versavis/imu"/>
+        <remap from="pos0" to="piksi/position_receiver_0/ros/pos_enu_cov"/>
+        <remap from="baseline0" to="piksi/position_receiver_0/sbp/baseline_heading"/>
+        <rosparam file="$(find mav_state_estimation)/cfg/estimator_glacier.yaml"/>
+      </node>
+    </group>
+
+
+   
+  </group>
+</launch>

@@ -10,7 +10,7 @@ Please cite our [accompanying publication](https://arxiv.org/pdf/2106.10108.pdf)
 ```
 Bähnemann, Rik, et al.
 "Under the Sand: Navigation and Localization of a Small Unmanned Aerial Vehicle for Landmine Detection with Ground Penetrating Synthetic Aperture Radar"
-Field Robotics. 2021 (submitted).
+Field Robotics, Vol. 2, (2022), 1028–1067.
 ```
 ![](https://user-images.githubusercontent.com/11293852/104023073-6af65a80-51c1-11eb-8a77-a9cfd53860fd.png)
 
